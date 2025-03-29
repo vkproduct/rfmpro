@@ -5,8 +5,6 @@ from supabase import create_client
 import pandas as pd
 import os
 from dotenv import load_dotenv
-import chardet
-import csv
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -55,89 +53,7 @@ async def upload_file(
 
         # Чтение файла в зависимости от расширения
         if file.filename.endswith('.csv'):
-            try:
-                # Читаем содержимое файла один раз
-                raw_data = file.file.read()
-                
-                # Определение кодировки
-                result = chardet.detect(raw_data)
-                encoding = result['encoding']
-                print(f"Определена кодировка: {encoding}")
-                
-                # Если кодировка не определена, пробуем стандартные варианты
-                if not encoding:
-                    encodings = ['utf-8', 'cp1251', 'latin1', 'iso-8859-5']
-                    for enc in encodings:
-                        try:
-                            decoded_data = raw_data.decode(enc)
-                            encoding = enc
-                            print(f"Использована кодировка: {enc}")
-                            break
-                        except Exception as e:
-                            print(f"Ошибка при декодировании {enc}: {str(e)}")
-                            continue
-                    if not encoding:
-                        raise HTTPException(status_code=400, detail="Не удалось определить кодировку файла")
-                
-                # Декодируем данные
-                try:
-                    decoded_data = raw_data.decode(encoding)
-                    print(f"Данные успешно декодированы, длина: {len(decoded_data)}")
-                except Exception as e:
-                    print(f"Ошибка декодирования: {str(e)}")
-                    raise HTTPException(status_code=400, detail=f"Ошибка декодирования файла. Кодировка: {encoding}")
-                
-                # Определение разделителя
-                try:
-                    dialect = csv.Sniffer().sniff(decoded_data)
-                    separator = dialect.delimiter
-                    print(f"Определен разделитель: '{separator}'")
-                except Exception as e:
-                    print(f"Ошибка определения разделителя: {str(e)}")
-                    # Если не удалось определить разделитель, пробуем разные варианты
-                    separators = [',', ';', '\t']
-                    for sep in separators:
-                        try:
-                            pd.read_csv(pd.io.StringIO(decoded_data), sep=sep)
-                            separator = sep
-                            print(f"Использован разделитель: '{sep}'")
-                            break
-                        except Exception as e:
-                            print(f"Ошибка при проверке разделителя '{sep}': {str(e)}")
-                            continue
-                    else:
-                        raise HTTPException(status_code=400, detail="Не удалось определить разделитель в файле")
-                
-                # Чтение файла с определенными параметрами
-                try:
-                    df = pd.read_csv(
-                        pd.io.StringIO(decoded_data),
-                        sep=separator,
-                        on_bad_lines='skip',
-                        dtype=str,
-                        encoding=encoding
-                    )
-                    print(f"Файл успешно прочитан, колонки: {df.columns.tolist()}")
-                    print(f"Количество строк: {len(df)}")
-                except Exception as e:
-                    print(f"Ошибка при чтении CSV: {str(e)}")
-                    raise HTTPException(status_code=400, detail=f"Ошибка при чтении CSV: {str(e)}")
-                
-                # Проверка наличия данных
-                if df.empty:
-                    raise HTTPException(status_code=400, detail="Файл не содержит данных")
-                
-                # Конвертация числовых колонок
-                try:
-                    df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce')
-                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-                    print(f"Данные успешно конвертированы")
-                except Exception as e:
-                    print(f"Ошибка при конвертации данных: {str(e)}")
-                    raise HTTPException(status_code=400, detail=f"Ошибка при конвертации данных: {str(e)}")
-            except Exception as e:
-                print(f"Общая ошибка при обработке CSV: {str(e)}")
-                raise HTTPException(status_code=400, detail=f"Ошибка при обработке CSV файла: {str(e)}")
+            df = pd.read_csv(file.file)
         else:
             df = pd.read_excel(file.file)
 

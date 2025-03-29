@@ -52,31 +52,29 @@ class AuthComponent extends HTMLElement {
                     font-size: 1.5rem;
                     font-weight: 700;
                     color: var(--text);
-                    margin-bottom: var(--spacing-lg);
+                    margin-bottom: var(--spacing-md);
                     letter-spacing: -0.02em;
                 }
                 .form-group {
                     margin-bottom: var(--spacing-md);
                 }
-                .form-label {
+                .form-group label {
                     display: block;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    color: var(--text);
                     margin-bottom: var(--spacing-xs);
+                    color: var(--text);
+                    font-weight: 500;
                 }
-                .form-input {
+                .form-group input {
                     width: 100%;
                     padding: var(--spacing-sm);
                     border: 1px solid var(--border);
                     border-radius: var(--radius);
                     font-size: 1rem;
-                    transition: all 0.2s ease;
+                    transition: border-color 0.2s ease;
                 }
-                .form-input:focus {
+                .form-group input:focus {
                     outline: none;
                     border-color: var(--primary);
-                    box-shadow: 0 0 0 2px rgba(255, 90, 95, 0.1);
                 }
                 .button {
                     width: 100%;
@@ -86,7 +84,6 @@ class AuthComponent extends HTMLElement {
                     cursor: pointer;
                     transition: all 0.2s ease;
                     font-size: 1rem;
-                    margin-bottom: var(--spacing-sm);
                 }
                 .button.primary {
                     background: var(--primary);
@@ -97,89 +94,69 @@ class AuthComponent extends HTMLElement {
                     background: var(--primary-hover);
                     transform: translateY(-1px);
                 }
-                .button.secondary {
-                    background: transparent;
-                    color: var(--text);
-                    border: 2px solid var(--border);
+                .tabs {
+                    display: flex;
+                    margin-bottom: var(--spacing-md);
+                    border-bottom: 1px solid var(--border);
                 }
-                .button.secondary:hover {
-                    border-color: var(--primary);
-                    color: var(--primary);
-                    transform: translateY(-1px);
+                .tab {
+                    padding: var(--spacing-sm) var(--spacing-md);
+                    cursor: pointer;
+                    color: var(--text-light);
+                    font-weight: 500;
+                    transition: all 0.2s ease;
                 }
-                .error-message {
+                .tab.active {
                     color: var(--primary);
+                    border-bottom: 2px solid var(--primary);
+                }
+                .error {
+                    color: var(--error);
                     font-size: 0.875rem;
                     margin-top: var(--spacing-xs);
-                    display: none;
                 }
-                .error-message.visible {
-                    display: block;
-                }
-                .success-screen {
-                    text-align: center;
-                    display: none;
-                }
-                .success-screen.visible {
-                    display: block;
-                }
-                .success-icon {
-                    font-size: 3rem;
-                    color: #4CAF50;
-                    margin-bottom: var(--spacing-md);
-                }
-                .success-title {
-                    font-size: 1.5rem;
-                    font-weight: 700;
-                    color: var(--text);
-                    margin-bottom: var(--spacing-md);
-                }
-                .success-message {
-                    color: var(--text-light);
-                    font-size: 1rem;
-                    line-height: 1.5;
-                    margin-bottom: var(--spacing-lg);
-                }
-                .back-to-login {
-                    color: var(--primary);
-                    cursor: pointer;
+                .success {
+                    color: var(--success);
                     font-size: 0.875rem;
-                    text-decoration: underline;
-                }
-                .back-to-login:hover {
-                    color: var(--primary-hover);
+                    margin-top: var(--spacing-xs);
                 }
             </style>
             <div class="modal">
                 <div class="modal-content">
                     <div class="modal-close">×</div>
-                    
-                    <!-- Форма входа/регистрации -->
-                    <div class="auth-form">
-                        <h2 class="modal-title">Вход</h2>
-                        <div class="form-group">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-input" id="email" placeholder="your@email.com">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Пароль</label>
-                            <input type="password" class="form-input" id="password" placeholder="••••••••">
-                        </div>
-                        <div class="error-message" id="error-message"></div>
-                        <button class="button primary" id="login-btn">Войти</button>
-                        <button class="button secondary" id="signup-btn">Регистрация</button>
+                    <div class="tabs">
+                        <div class="tab active" data-tab="login">Вход</div>
+                        <div class="tab" data-tab="register">Регистрация</div>
                     </div>
-
-                    <!-- Экран успешной регистрации -->
-                    <div class="success-screen" id="success-screen">
-                        <div class="success-icon">✓</div>
-                        <h2 class="success-title">Регистрация успешна!</h2>
-                        <p class="success-message">
-                            Мы отправили письмо с подтверждением на ваш email.<br>
-                            Пожалуйста, проверьте почту и перейдите по ссылке для подтверждения аккаунта.<br>
-                            После подтверждения вы сможете войти в систему.
-                        </p>
-                        <div class="back-to-login" id="back-to-login">Вернуться к входу</div>
+                    <div id="login-form">
+                        <h2 class="modal-title">Вход</h2>
+                        <form>
+                            <div class="form-group">
+                                <label for="login-email">Email</label>
+                                <input type="email" id="login-email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="login-password">Пароль</label>
+                                <input type="password" id="login-password" required>
+                            </div>
+                            <div class="error" id="login-error"></div>
+                            <button type="submit" class="button primary">Войти</button>
+                        </form>
+                    </div>
+                    <div id="register-form" style="display: none;">
+                        <h2 class="modal-title">Регистрация</h2>
+                        <form>
+                            <div class="form-group">
+                                <label for="register-email">Email</label>
+                                <input type="email" id="register-email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="register-password">Пароль</label>
+                                <input type="password" id="register-password" required>
+                            </div>
+                            <div class="error" id="register-error"></div>
+                            <button type="submit" class="button primary">Зарегистрироваться</button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -188,44 +165,45 @@ class AuthComponent extends HTMLElement {
         // Добавляем обработчики для модального окна
         const modal = this.shadowRoot.querySelector('.modal');
         const modalClose = this.shadowRoot.querySelector('.modal-close');
-        const loginBtn = this.shadowRoot.querySelector('#login-btn');
-        const signupBtn = this.shadowRoot.querySelector('#signup-btn');
-        const errorMessage = this.shadowRoot.querySelector('#error-message');
-        const authForm = this.shadowRoot.querySelector('.auth-form');
-        const successScreen = this.shadowRoot.querySelector('#success-screen');
-        const backToLogin = this.shadowRoot.querySelector('#back-to-login');
 
-        // Функция для показа сообщений
-        const showMessage = (message, isError = false) => {
-            errorMessage.textContent = isError ? message : '';
-            errorMessage.classList.toggle('visible', isError);
-        };
+        modalClose.addEventListener('click', () => {
+            this.close();
+        });
 
-        // Функция для очистки сообщений
-        const clearMessages = () => {
-            errorMessage.classList.remove('visible');
-        };
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.close();
+            }
+        });
 
-        // Функция для показа экрана успешной регистрации
-        const showSuccessScreen = () => {
-            authForm.style.display = 'none';
-            successScreen.classList.add('visible');
-        };
+        // Добавляем обработчики для табов
+        const tabs = this.shadowRoot.querySelectorAll('.tab');
+        const loginForm = this.shadowRoot.querySelector('#login-form');
+        const registerForm = this.shadowRoot.querySelector('#register-form');
 
-        // Функция для возврата к форме входа
-        const showAuthForm = () => {
-            successScreen.classList.remove('visible');
-            authForm.style.display = 'block';
-            this.shadowRoot.querySelector('#email').value = '';
-            this.shadowRoot.querySelector('#password').value = '';
-            clearMessages();
-        };
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                if (tab.dataset.tab === 'login') {
+                    loginForm.style.display = 'block';
+                    registerForm.style.display = 'none';
+                } else {
+                    loginForm.style.display = 'none';
+                    registerForm.style.display = 'block';
+                }
+            });
+        });
 
-        // Обработчик для входа
-        loginBtn.addEventListener('click', async () => {
-            clearMessages();
-            const email = this.shadowRoot.querySelector('#email').value;
-            const password = this.shadowRoot.querySelector('#password').value;
+        // Добавляем обработчики для форм
+        const loginFormElement = loginForm.querySelector('form');
+        const registerFormElement = registerForm.querySelector('form');
+
+        loginFormElement.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginFormElement.querySelector('#login-email').value;
+            const password = loginFormElement.querySelector('#login-password').value;
+            const errorElement = loginFormElement.querySelector('.error');
 
             try {
                 const { data, error } = await window.supabase.auth.signInWithPassword({
@@ -236,18 +214,18 @@ class AuthComponent extends HTMLElement {
                 if (error) throw error;
 
                 localStorage.setItem('token', data.session.access_token);
-                modal.classList.remove('active');
-                this.dispatchEvent(new CustomEvent('auth-success'));
+                document.dispatchEvent(new CustomEvent('auth-success'));
+                this.close();
             } catch (error) {
-                showMessage(error.message, true);
+                errorElement.textContent = error.message;
             }
         });
 
-        // Обработчик для регистрации
-        signupBtn.addEventListener('click', async () => {
-            clearMessages();
-            const email = this.shadowRoot.querySelector('#email').value;
-            const password = this.shadowRoot.querySelector('#password').value;
+        registerFormElement.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = registerFormElement.querySelector('#register-email').value;
+            const password = registerFormElement.querySelector('#register-password').value;
+            const errorElement = registerFormElement.querySelector('.error');
 
             try {
                 const { data, error } = await window.supabase.auth.signUp({
@@ -257,33 +235,22 @@ class AuthComponent extends HTMLElement {
 
                 if (error) throw error;
 
-                showSuccessScreen();
+                errorElement.textContent = 'Проверьте email для подтверждения регистрации';
+                errorElement.classList.add('success');
             } catch (error) {
-                showMessage(error.message, true);
+                errorElement.textContent = error.message;
+                errorElement.classList.remove('success');
             }
         });
+    }
 
-        // Обработчик для возврата к форме входа
-        backToLogin.addEventListener('click', showAuthForm);
+    open() {
+        this.shadowRoot.querySelector('.modal').classList.add('active');
+    }
 
-        // Обработчики для закрытия модального окна
-        modalClose.addEventListener('click', () => {
-            modal.classList.remove('active');
-            showAuthForm();
-        });
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.remove('active');
-                showAuthForm();
-            }
-        });
-
-        // Метод для открытия модального окна
-        this.open = () => {
-            modal.classList.add('active');
-            showAuthForm();
-        };
+    close() {
+        this.shadowRoot.querySelector('.modal').classList.remove('active');
+        this.shadowRoot.querySelectorAll('.error').forEach(el => el.textContent = '');
     }
 }
 

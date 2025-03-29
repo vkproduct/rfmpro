@@ -254,28 +254,8 @@ class UploadComponent extends HTMLElement {
         }
 
         function parseCSV(text) {
-            const lines = text.split('\n');
-            return lines.map(line => {
-                // Обработка кавычек и запятых внутри кавычек
-                const cells = [];
-                let currentCell = '';
-                let insideQuotes = false;
-                
-                for (let i = 0; i < line.length; i++) {
-                    const char = line[i];
-                    if (char === '"') {
-                        insideQuotes = !insideQuotes;
-                    } else if (char === ',' && !insideQuotes) {
-                        cells.push(currentCell.trim());
-                        currentCell = '';
-                    } else {
-                        currentCell += char;
-                    }
-                }
-                cells.push(currentCell.trim());
-                
-                return cells;
-            }).filter(line => line.length > 0 && line.some(cell => cell.trim() !== ''));
+            const lines = text.split('\\n');
+            return lines.map(line => line.split(',').map(cell => cell.trim()));
         }
 
         function populateColumnSelects(headers) {

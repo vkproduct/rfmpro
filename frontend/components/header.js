@@ -246,10 +246,10 @@ class HeaderComponent extends HTMLElement {
                         <span>RFM Pro</span>
                     </a>
                     <nav class="nav">
-                        <a href="#features" class="nav-link">Возможности</a>
-                        <a href="#how-it-works" class="nav-link">Как это работает</a>
-                        <a href="#pricing" class="nav-link">Тарифы</a>
-                        <a href="#contact" class="nav-link">Контакты</a>
+                        <a href="/#features" class="nav-link">Возможности</a>
+                        <a href="/#how-it-works" class="nav-link">Как это работает</a>
+                        <a href="/#use-cases" class="nav-link">Кейсы</a>
+                        <a href="/#pricing" class="nav-link">Тарифы</a>
                         <button class="button secondary pricing-trigger">Тарифы</button>
                         <button class="button primary auth-trigger">Войти</button>
                     </nav>
@@ -351,14 +351,34 @@ class HeaderComponent extends HTMLElement {
         const authComponent = this.shadowRoot.querySelector('auth-component');
 
         authTrigger.addEventListener('click', () => {
-            authComponent.open();
+            const isAuthenticated = localStorage.getItem('token');
+            if (isAuthenticated) {
+                window.location.href = '/dashboard';
+            } else {
+                authComponent.open();
+            }
         });
 
-        authComponent.addEventListener('auth-success', () => {
-            // Обновляем UI после успешной авторизации
-            authTrigger.textContent = 'Профиль';
+        // Слушаем событие успешной авторизации
+        document.addEventListener('auth-success', () => {
+            authTrigger.textContent = 'Дашборд';
             authTrigger.classList.add('active');
         });
+
+        // Проверяем авторизацию при загрузке
+        this.checkAuth();
+    }
+
+    async checkAuth() {
+        const token = localStorage.getItem('token');
+        if (token) {
+            const { data: { user }, error } = await window.supabase.auth.getUser(token);
+            if (user) {
+                document.dispatchEvent(new CustomEvent('auth-success'));
+            } else {
+                localStorage.removeItem('token');
+            }
+        }
     }
 }
 
