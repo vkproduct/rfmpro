@@ -87,12 +87,67 @@
             window.location.href = 'login.html';
         });
 
+        // Форматирование даты
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('ru-RU', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Форматирование чисел
+        function formatNumber(number) {
+            return new Intl.NumberFormat('ru-RU', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(number);
+        }
+
+        // Создание карточки результата
+        function createResultCard(result) {
+            const segmentsHtml = Object.entries(result.segments)
+                .map(([segment, data]) => `
+                    <li>
+                        <strong>${segment}</strong>:
+                        ${data.count} клиентов,
+                        ${formatNumber(data.avg_revenue)} ₽ средняя выручка
+                    </li>
+                `).join('');
+
+            return `
+                <div class="result-card">
+                    <h3>Анализ от ${formatDate(result.created_at)}</h3>
+                    <div class="result-summary">
+                        <p>Всего клиентов: ${result.result.summary.total_customers}</p>
+                        <p>Общая выручка: ${formatNumber(result.result.summary.total_revenue)} ₽</p>
+                        <p>Средний чек: ${formatNumber(result.result.summary.avg_order_value)} ₽</p>
+                    </div>
+                    <div class="result-segments">
+                        <h4>Сегменты клиентов:</h4>
+                        <ul>
+                            ${segmentsHtml}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
         // Обработка загрузки файла
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(e.target);
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            
             try {
+                // Отключаем кнопку во время загрузки
+                submitButton.disabled = true;
+                submitButton.textContent = 'Загрузка...';
+                
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData,
@@ -104,14 +159,26 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Перезагружаем страницу для отображения новых результатов
-                    window.location.reload();
+                    // Добавляем новый результат в начало списка
+                    const resultsGrid = document.getElementById('results');
+                    const newCard = createResultCard(data);
+                    resultsGrid.insertAdjacentHTML('afterbegin', newCard);
+                    
+                    // Очищаем форму
+                    e.target.reset();
+                    
+                    // Показываем уведомление об успехе
+                    alert('Файл успешно обработан');
                 } else {
                     alert(data.error || 'Ошибка загрузки файла');
                 }
             } catch (error) {
                 alert('Ошибка при отправке формы');
                 console.error(error);
+            } finally {
+                // Включаем кнопку обратно
+                submitButton.disabled = false;
+                submitButton.textContent = 'Загрузить и проанализировать';
             }
         });
     </script>

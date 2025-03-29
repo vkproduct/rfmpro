@@ -1,13 +1,85 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from typing import Dict, Any, List
+
+def safe_qcut(series: pd.Series, q: int, labels: List[int], default: int = 1) -> pd.Series:
+    """
+    Безопасное применение pd.qcut с обработкой ошибок на уровне отдельных клиентов.
+    
+    Args:
+        series: Серия данных для квантилизации
+        q: Количество квантилей
+        labels: Метки для квантилей
+        default: Значение по умолчанию при ошибке
+    
+    Returns:
+        pd.Series: Результат квантилизации
+    """
+    try:
+        return pd.qcut(series, q=q, labels=labels)
+    except ValueError:
+        # Если не удалось разделить на квантили, используем простую сегментацию
+        if len(series) == 0:
+            return pd.Series(default, index=series.index)
+        
+        # Разделяем на 4 равные части по значению
+        thresholds = series.quantile([0.25, 0.5, 0.75])
+        return pd.cut(series, 
+                     bins=[-np.inf] + thresholds.tolist() + [np.inf],
+                     labels=labels)
+
+def calculate_segment_stats(rfm: pd.DataFrame, customer_column: str) -> Dict[str, Any]:
+    """
+    Расчет статистики по сегментам.
+    
+    Args:
+        rfm: DataFrame с RFM-метриками
+        customer_column: Название колонки с ID клиента
+    
+    Returns:
+        Dict с статистикой по сегментам
+    """
+    return rfm.groupby('segment').agg({
+        customer_column: 'count',
+        'monetary': ['mean', 'sum'],
+        'frequency': 'mean'
+    }).round(2)
+
+def calculate_metrics(rfm: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+    """
+    Расчет метрик RFM.
+    
+    Args:
+        rfm: DataFrame с RFM-метриками
+    
+    Returns:
+        Dict с метриками
+    """
+    return {
+        'recency': {
+            'mean': float(rfm['recency'].mean()),
+            'median': float(rfm['recency'].median()),
+            'std': float(rfm['recency'].std())
+        },
+        'frequency': {
+            'mean': float(rfm['frequency'].mean()),
+            'median': float(rfm['frequency'].median()),
+            'std': float(rfm['frequency'].std())
+        },
+        'monetary': {
+            'mean': float(rfm['monetary'].mean()),
+            'median': float(rfm['monetary'].median()),
+            'std': float(rfm['monetary'].std())
+        }
+    }
 
 def perform_rfm_analysis(
     df: pd.DataFrame,
     date_column: str = 'order_date',
     amount_column: str = 'order_amount',
     customer_column: str = 'customer_id'
-) -> dict:
+) -> Dict[str, Any]:
     """
     Выполняет RFM-анализ на основе транзакционных данных.
     
@@ -43,11 +115,11 @@ def perform_rfm_analysis(
         raise ValueError(f"Ошибка конвертации даты: {str(e)}")
     
     # Расчет метрик
-    now = datetime.now()
+    current_date = df[date_column].max()
     
-    # Recency (дни с последней транзакции)
+    # Оптимизированная группировка с одним проходом
     rfm = df.groupby(customer_column).agg({
-        date_column: lambda x: (now - x.max()).days,
+        date_column: lambda x: (current_date - x.max()).days,
         amount_column: ['count', 'sum']
     }).reset_index()
     
@@ -59,20 +131,9 @@ def perform_rfm_analysis(
     rfm['monetary'] = rfm['monetary'].astype(float)
     
     # Расчет RFM-баллов (4 квантиля)
-    try:
-        rfm['r_score'] = pd.qcut(rfm['recency'], q=4, labels=[4, 3, 2, 1])
-    except ValueError:
-        rfm['r_score'] = 1  # Минимальный балл при ошибке
-    
-    try:
-        rfm['f_score'] = pd.qcut(rfm['frequency'].rank(method='first'), q=4, labels=[1, 2, 3, 4])
-    except ValueError:
-        rfm['f_score'] = 1  # Минимальный балл при ошибке
-    
-    try:
-        rfm['m_score'] = pd.qcut(rfm['monetary'], q=4, labels=[1, 2, 3, 4])
-    except ValueError:
-        rfm['m_score'] = 1  # Минимальный балл при ошибке
+    rfm['r_score'] = safe_qcut(rfm['recency'], 4, [4, 3, 2, 1])
+    rfm['f_score'] = safe_qcut(rfm['frequency'].rank(method='first'), 4, [1, 2, 3, 4])
+    rfm['m_score'] = safe_qcut(rfm['monetary'], 4, [1, 2, 3, 4])
     
     # Расчет общего RFM-балла
     rfm['rfm_score'] = rfm['r_score'].astype(str) + rfm['f_score'].astype(str) + rfm['m_score'].astype(str)
@@ -91,12 +152,9 @@ def perform_rfm_analysis(
     
     rfm['segment'] = rfm.apply(segment_customers, axis=1)
     
-    # Расчет статистики по сегментам
-    segment_stats = rfm.groupby('segment').agg({
-        customer_column: 'count',
-        'monetary': ['mean', 'sum'],
-        'frequency': 'mean'
-    }).round(2)
+    # Расчет статистики
+    segment_stats = calculate_segment_stats(rfm, customer_column)
+    metrics = calculate_metrics(rfm)
     
     # Форматирование результатов
     result = {
@@ -116,35 +174,24 @@ def perform_rfm_analysis(
             }
             for segment in segment_stats.index
         },
-        'metrics': {
-            'recency': {
-                'mean': float(rfm['recency'].mean()),
-                'median': float(rfm['recency'].median()),
-                'std': float(rfm['recency'].std())
-            },
-            'frequency': {
-                'mean': float(rfm['frequency'].mean()),
-                'median': float(rfm['frequency'].median()),
-                'std': float(rfm['frequency'].std())
-            },
-            'monetary': {
-                'mean': float(rfm['monetary'].mean()),
-                'median': float(rfm['monetary'].median()),
-                'std': float(rfm['monetary'].std())
-            }
-        }
+        'metrics': metrics
     }
     
     return result
 
-# Для обратной совместимости
-def calculate_rfm(data):
+def calculate_rfm(df: pd.DataFrame) -> Dict[str, Any]:
     """
-    Устаревшая функция для обратной совместимости.
-    Использует perform_rfm_analysis с предустановленными именами колонок.
+    Обертка для обратной совместимости.
+    Использует стандартные имена колонок.
+    
+    Args:
+        df (pd.DataFrame): DataFrame с транзакционными данными
+    
+    Returns:
+        dict: Результаты RFM-анализа
     """
     return perform_rfm_analysis(
-        data,
+        df,
         date_column='order_date',
         amount_column='order_amount',
         customer_column='customer_id'
