@@ -254,8 +254,28 @@ class UploadComponent extends HTMLElement {
         }
 
         function parseCSV(text) {
-            const lines = text.split('\\n');
-            return lines.map(line => line.split(',').map(cell => cell.trim()));
+            const lines = text.split('\n');
+            return lines.map(line => {
+                // Обработка кавычек и запятых внутри кавычек
+                const cells = [];
+                let currentCell = '';
+                let insideQuotes = false;
+                
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        insideQuotes = !insideQuotes;
+                    } else if (char === ',' && !insideQuotes) {
+                        cells.push(currentCell.trim());
+                        currentCell = '';
+                    } else {
+                        currentCell += char;
+                    }
+                }
+                cells.push(currentCell.trim());
+                
+                return cells;
+            }).filter(line => line.length > 0 && line.some(cell => cell.trim() !== ''));
         }
 
         function populateColumnSelects(headers) {
@@ -293,40 +313,66 @@ class UploadComponent extends HTMLElement {
                 return;
             }
 
-            const token = localStorage.getItem('token');
-            if (!token) {
-                showError('Пожалуйста, войдите в систему');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('client_id_col', clientIdCol);
-            formData.append('date_col', dateCol);
-            formData.append('amount_col', amountCol);
-
-            try {
-                uploadBtn.disabled = true;
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Ошибка загрузки данных');
-                }
-
-                showSuccess('Данные успешно загружены');
-                this.dispatchEvent(new CustomEvent('upload-success'));
-            } catch (error) {
-                showError(error.message);
-            } finally {
-                uploadBtn.disabled = false;
-            }
+            await this.uploadData();
         });
+    }
+
+    async uploadData() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showError('Пожалуйста, войдите в систему');
+            return;
+        }
+
+        const fileInput = this.shadowRoot.querySelector('.file-input');
+        const file = fileInput.files[0];
+        if (!file) {
+            showError('Пожалуйста, выберите файл');
+            return;
+        }
+
+        // Проверка формата файла
+        const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+        if (!validTypes.includes(file.type)) {
+            showError('Поддерживаются только файлы CSV и Excel');
+            return;
+        }
+
+        const clientIdCol = this.shadowRoot.querySelector('.client-id-select').value;
+        const dateCol = this.shadowRoot.querySelector('.date-select').value;
+        const amountCol = this.shadowRoot.querySelector('.amount-select').value;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('client_id_col', clientIdCol);
+        formData.append('date_col', dateCol);
+        formData.append('amount_col', amountCol);
+
+        try {
+            const uploadBtn = this.shadowRoot.querySelector('.button');
+            uploadBtn.disabled = true;
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Ошибка загрузки данных');
+            }
+
+            const result = await response.json();
+            showSuccess('Файл успешно загружен');
+            this.dispatchEvent(new CustomEvent('upload-success'));
+        } catch (error) {
+            console.error('Ошибка:', error);
+            showError(error.message || 'Ошибка при загрузке файла');
+        } finally {
+            uploadBtn.disabled = false;
+        }
     }
 }
 

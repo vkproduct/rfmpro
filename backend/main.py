@@ -5,6 +5,8 @@ from supabase import create_client
 import pandas as pd
 import os
 from dotenv import load_dotenv
+import chardet
+import csv
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -47,9 +49,95 @@ async def upload_file(
     user_id: str = Depends(get_current_user)
 ):
     try:
+        # Проверка формата файла
+        if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Неподдерживаемый формат файла")
+
         # Чтение файла в зависимости от расширения
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(file.file)
+            try:
+                # Читаем содержимое файла один раз
+                raw_data = file.file.read()
+                
+                # Определение кодировки
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+                print(f"Определена кодировка: {encoding}")
+                
+                # Если кодировка не определена, пробуем стандартные варианты
+                if not encoding:
+                    encodings = ['utf-8', 'cp1251', 'latin1', 'iso-8859-5']
+                    for enc in encodings:
+                        try:
+                            decoded_data = raw_data.decode(enc)
+                            encoding = enc
+                            print(f"Использована кодировка: {enc}")
+                            break
+                        except Exception as e:
+                            print(f"Ошибка при декодировании {enc}: {str(e)}")
+                            continue
+                    if not encoding:
+                        raise HTTPException(status_code=400, detail="Не удалось определить кодировку файла")
+                
+                # Декодируем данные
+                try:
+                    decoded_data = raw_data.decode(encoding)
+                    print(f"Данные успешно декодированы, длина: {len(decoded_data)}")
+                except Exception as e:
+                    print(f"Ошибка декодирования: {str(e)}")
+                    raise HTTPException(status_code=400, detail=f"Ошибка декодирования файла. Кодировка: {encoding}")
+                
+                # Определение разделителя
+                try:
+                    dialect = csv.Sniffer().sniff(decoded_data)
+                    separator = dialect.delimiter
+                    print(f"Определен разделитель: '{separator}'")
+                except Exception as e:
+                    print(f"Ошибка определения разделителя: {str(e)}")
+                    # Если не удалось определить разделитель, пробуем разные варианты
+                    separators = [',', ';', '\t']
+                    for sep in separators:
+                        try:
+                            pd.read_csv(pd.io.StringIO(decoded_data), sep=sep)
+                            separator = sep
+                            print(f"Использован разделитель: '{sep}'")
+                            break
+                        except Exception as e:
+                            print(f"Ошибка при проверке разделителя '{sep}': {str(e)}")
+                            continue
+                    else:
+                        raise HTTPException(status_code=400, detail="Не удалось определить разделитель в файле")
+                
+                # Чтение файла с определенными параметрами
+                try:
+                    df = pd.read_csv(
+                        pd.io.StringIO(decoded_data),
+                        sep=separator,
+                        on_bad_lines='skip',
+                        dtype=str,
+                        encoding=encoding
+                    )
+                    print(f"Файл успешно прочитан, колонки: {df.columns.tolist()}")
+                    print(f"Количество строк: {len(df)}")
+                except Exception as e:
+                    print(f"Ошибка при чтении CSV: {str(e)}")
+                    raise HTTPException(status_code=400, detail=f"Ошибка при чтении CSV: {str(e)}")
+                
+                # Проверка наличия данных
+                if df.empty:
+                    raise HTTPException(status_code=400, detail="Файл не содержит данных")
+                
+                # Конвертация числовых колонок
+                try:
+                    df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce')
+                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                    print(f"Данные успешно конвертированы")
+                except Exception as e:
+                    print(f"Ошибка при конвертации данных: {str(e)}")
+                    raise HTTPException(status_code=400, detail=f"Ошибка при конвертации данных: {str(e)}")
+            except Exception as e:
+                print(f"Общая ошибка при обработке CSV: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Ошибка при обработке CSV файла: {str(e)}")
         else:
             df = pd.read_excel(file.file)
 
@@ -57,7 +145,7 @@ async def upload_file(
         required_cols = [client_id_col, date_col, amount_col]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
-            raise HTTPException(status_code=400, detail=f"Missing columns: {', '.join(missing_cols)}")
+            raise HTTPException(status_code=400, detail=f"Отсутствуют необходимые колонки: {', '.join(missing_cols)}")
 
         # Подготовка данных
         data = df[[client_id_col, date_col, amount_col]].rename(columns={
@@ -69,14 +157,22 @@ async def upload_file(
         # Добавление user_id к каждой записи
         for record in data:
             record["user_id"] = user_id
+            # Преобразование типов данных
+            record["client_id"] = str(record["client_id"])
+            record["date"] = str(record["date"])
+            record["amount"] = float(record["amount"])
 
         # Сохранение в Supabase
         response = supabase.table("purchases").insert(data).execute()
         
         if response.error:
-            raise HTTPException(status_code=500, detail="Error saving data")
+            raise HTTPException(status_code=500, detail="Ошибка сохранения данных")
 
-        return {"message": "Данные успешно загружены"}
+        return {"message": "Данные успешно загружены", "count": len(data)}
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="Файл пуст")
+    except pd.errors.ParserError:
+        raise HTTPException(status_code=400, detail="Ошибка при чтении файла. Проверьте формат данных")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
