@@ -39,6 +39,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 data = dict(x.split('=') for x in post_data.split('&'))
                 email = data.get('email')
                 password = data.get('password')
+                print(f"Регистрация: {email}")
                 supabase.table('users').insert({'email': email, 'password': password}).execute()
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -51,6 +52,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 data = dict(x.split('=') for x in post_data.split('&'))
                 email = data.get('email')
                 password = data.get('password')
+                print(f"Вход: {email}")
                 user = supabase.table('users').select('*').eq('email', email).eq('password', password).execute()
                 if user.data and len(user.data) > 0:
                     auth = base64.b64encode(f"{email}:{password}".encode()).decode()
@@ -76,10 +78,12 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length)
+                print(f"Получен файл размером: {content_length} байт")
                 with open("temp.csv", "wb") as f:
                     f.write(post_data)
                 
                 data = pd.read_csv("temp.csv")
+                print(f"CSV прочитан: {data.columns.tolist()}")
                 required_columns = {'customer_id', 'order_date', 'order_amount'}
                 if not required_columns.issubset(data.columns):
                     missing = required_columns - set(data.columns)
@@ -91,7 +95,9 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 rfm_result = perform_rfm_analysis(data)
                 file_name = f"result_{int(datetime.now().timestamp())}.csv"
-                supabase.storage().from_('uploads').upload(file_name, open("temp.csv", 'rb'))
+                print(f"Загрузка в Storage: {file_name}")
+                supabase.storage.from_('uploads').upload(file_name, open("temp.csv", 'rb'))
+                print(f"Вставка в rfm_results: {rfm_result}")
                 supabase.table('rfm_results').insert({'file_name': file_name, 'result': rfm_result}).execute()
                 
                 self.send_response(200)
