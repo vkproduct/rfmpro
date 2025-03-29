@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>RFM Анализатор</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>RFM Анализатор</h1>
+        <div id="auth" class="card">
+            <h2>Регистрация</h2>
+            <input id="reg_email" placeholder="Email">
+            <input id="reg_password" type="password" placeholder="Пароль">
+            <button onclick="register()">Зарегистрироваться</button>
+            
+            <h2>Вход</h2>
+            <input id="login_email" placeholder="Email">
+            <input id="login_password" type="password" placeholder="Пароль">
+            <button onclick="login()">Войти</button>
+        </div>
+        <div id="upload" class="card" style="display: none;">
+            <h2>Загрузка данных</h2>
+            <input type="file" id="csvFile" accept=".csv">
+            <button onclick="upload()">Анализировать</button>
+            <pre id="result"></pre>
+        </div>
+    </div>
+    <script>
+        let authToken = null;
+        function register() {
+            const email = document.getElementById('reg_email').value;
+            const password = document.getElementById('reg_password').value;
+            fetch('/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `email=${email}&password=${password}`
+            })
+            .then(response => response.json())
+            .then(data => alert(data.message));
+        }
+
+        function login() {
+            const email = document.getElementById('login_email').value;
+            const password = document.getElementById('login_password').value;
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `email=${email}&password=${password}`
+            })
+            .then(response => {
+                authToken = response.headers.get('X-Auth-Token');
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('auth').style.display = 'none';
+                    document.getElementById('upload').style.display = 'block';
+                } else {
+                    alert(data.message);
+                }
+            });
+        }
+
+        function upload() {
+            const file = document.getElementById('csvFile').files[0];
+            fetch('/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Basic ${authToken}` },
+                body: file
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => alert('Ошибка: ' + error));
+        }
+    </script>
+</body>
+</html>
