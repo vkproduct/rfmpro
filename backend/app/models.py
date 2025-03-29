@@ -22,12 +22,14 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-class User(UserBase):
-    """Полная модель пользователя."""
+class UserInfo(UserBase):
+    """Модель информации о пользователе."""
     id: str
+    name: str
+    plan_type: str
+    plan_start_date: datetime
+    plan_end_date: Optional[datetime] = None
     created_at: datetime
-    is_active: bool = True
-    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -138,3 +140,53 @@ class APIResponse(BaseModel):
     message: str
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+class AnalysisParams(BaseModel):
+    """Модель параметров анализа."""
+    recency_weight: float = Field(ge=0, le=1, default=0.4)
+    frequency_weight: float = Field(ge=0, le=1, default=0.3)
+    monetary_weight: float = Field(ge=0, le=1, default=0.3)
+    segments_count: int = Field(ge=2, le=10, default=3)
+
+class AnalysisSummary(BaseModel):
+    """Модель сводки анализа."""
+    total_customers: int
+    segments: List[SegmentInfo]
+    average_rfm_score: float
+    best_segment: str
+    worst_segment: str
+
+class AnalysisResult(BaseModel):
+    """Модель результата анализа."""
+    id: str
+    user_id: str
+    file_id: str
+    status: str
+    parameters: AnalysisParams
+    summary: AnalysisSummary
+    recommendations: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class TokenResponse(BaseModel):
+    """Модель ответа с токеном."""
+    access_token: str
+    token_type: str = "bearer"
+
+class Recommendation(BaseModel):
+    """Модель рекомендации."""
+    segment: str
+    actions: List[str]
+    expected_outcomes: List[str]
+    priority: str
+
+class Recommendations(BaseModel):
+    """Модель рекомендаций."""
+    general_recommendations: List[str]
+    segment_recommendations: List[Recommendation]
+    overall_strategy: str
+    key_insights: List[str]

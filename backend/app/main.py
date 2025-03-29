@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta, datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import pandas as pd
 import io
 import os
@@ -33,6 +33,8 @@ from .auth import (
 from .rfm import perform_rfm_analysis, generate_ai_recommendations
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
+import tempfile
+import shutil
 
 # Инициализация FastAPI
 app = FastAPI(
@@ -458,7 +460,10 @@ async def export_analysis(
         current_user: Текущий пользователь
         
     Returns:
-        FileResponse: Файл с результатами
+        StreamingResponse: Файл с результатами
+        
+    Raises:
+        HTTPException: Если анализ не найден или произошла ошибка при экспорте
     """
     try:
         # Получаем результаты анализа
@@ -476,36 +481,93 @@ async def export_analysis(
         
         result = response.data[0]
         
-        # Создаем DataFrame с результатами
-        df = pd.DataFrame({
-            'segment': [s['name'] for s in result['summary']['segments']],
-            'customer_count': [s['customer_count'] for s in result['summary']['segments']],
-            'percentage': [s['percentage'] for s in result['summary']['segments']],
-            'rfm_score': [s['rfm_score'] for s in result['summary']['segments']]
-        })
-        
-        # Экспортируем в нужном формате
-        export_path = os.path.join(settings.upload_dir, f"analysis_{analysis_id}")
-        if format == "csv":
-            df.to_csv(f"{export_path}.csv", index=False)
-            return FileResponse(
-                f"{export_path}.csv",
-                media_type="text/csv",
-                filename=f"analysis_{analysis_id}.csv"
-            )
-        else:
-            df.to_excel(f"{export_path}.xlsx", index=False)
-            return FileResponse(
-                f"{export_path}.xlsx",
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                filename=f"analysis_{analysis_id}.xlsx"
-            )
-        
+        # Создаем временную директорию для экспорта
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Подготавливаем данные для экспорта
+            export_data = prepare_export_data(result)
+            
+            # Создаем DataFrame
+            df = pd.DataFrame(export_data)
+            
+            # Формируем имя файла
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"rfm_analysis_{analysis_id}_{timestamp}"
+            
+            if format == "csv":
+                # Экспортируем в CSV
+                file_path = os.path.join(temp_dir, f"{filename}.csv")
+                df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                
+                return FileResponse(
+                    file_path,
+                    media_type="text/csv",
+                    filename=f"{filename}.csv",
+                    background=None  # Важно для корректной очистки временных файлов
+                )
+            else:
+                # Экспортируем в Excel
+                file_path = os.path.join(temp_dir, f"{filename}.xlsx")
+                with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                    # Основные результаты
+                    df.to_excel(writer, sheet_name='Результаты', index=False)
+                    
+                    # Детали по сегментам
+                    segments_df = pd.DataFrame(result['summary']['segments'])
+                    segments_df.to_excel(writer, sheet_name='Сегменты', index=False)
+                    
+                    # Метрики
+                    metrics_df = pd.DataFrame([{
+                        'Всего клиентов': result['summary']['total_customers'],
+                        'Средний RFM-скор': result['summary']['average_rfm_score'],
+                        'Лучший сегмент': result['summary']['best_segment'],
+                        'Худший сегмент': result['summary']['worst_segment']
+                    }])
+                    metrics_df.to_excel(writer, sheet_name='Метрики', index=False)
+                
+                return FileResponse(
+                    file_path,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    filename=f"{filename}.xlsx",
+                    background=None  # Важно для корректной очистки временных файлов
+                )
+    
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нет данных для экспорта"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Ошибка при экспорте: {str(e)}"
         )
+
+def prepare_export_data(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Подготовка данных для экспорта.
+    
+    Args:
+        result: Результаты анализа
+        
+    Returns:
+        List[Dict[str, Any]]: Подготовленные данные
+    """
+    export_data = []
+    
+    # Добавляем информацию о каждом сегменте
+    for segment in result['summary']['segments']:
+        export_data.append({
+            'Сегмент': segment['name'],
+            'Описание': segment['description'],
+            'Количество клиентов': segment['customer_count'],
+            'Процент': f"{segment['percentage']:.1f}%",
+            'RFM-скор': f"{segment['rfm_score']:.3f}",
+            'Recency-скор': f"{segment['recency_score']:.3f}",
+            'Frequency-скор': f"{segment['frequency_score']:.3f}",
+            'Monetary-скор': f"{segment['monetary_score']:.3f}"
+        })
+    
+    return export_data
 
 @app.post("/update-plan", response_model=APIResponse)
 async def update_user_plan(

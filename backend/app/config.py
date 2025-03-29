@@ -4,6 +4,8 @@
 """
 
 import os
+from typing import Optional
+
 from pydantic import BaseSettings
 
 
@@ -33,10 +35,11 @@ class Settings(BaseSettings):
     basic_plan_limit: int = 1000
     
     # Настройки AI
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY", None)
     
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"
 
 
 # Создаем экземпляр настроек
