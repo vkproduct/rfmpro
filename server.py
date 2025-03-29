@@ -33,26 +33,22 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            data = dict(x.split('=') for x in post_data.split('&'))
-
             if self.path == '/register':
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                data = dict(x.split('=') for x in post_data.split('&'))
                 email = data.get('email')
                 password = data.get('password')
-                try:
-                    supabase.table('users').insert({'email': email, 'password': password}).execute()
-                    self.send_response(200)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
-                except Exception as e:
-                    self.send_response(400)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
+                supabase.table('users').insert({'email': email, 'password': password}).execute()
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
 
             elif self.path == '/login':
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                data = dict(x.split('=') for x in post_data.split('&'))
                 email = data.get('email')
                 password = data.get('password')
                 user = supabase.table('users').select('*').eq('email', email).eq('password', password).execute()
@@ -79,7 +75,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return
                 
                 content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
+                post_data = self.rfile.read(content_length)  # Читаем бинарные данные файла
                 with open("temp.csv", "wb") as f:
                     f.write(post_data)
                 

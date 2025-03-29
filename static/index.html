@@ -21,8 +21,10 @@
         </div>
         <div id="upload" class="card" style="display: none;">
             <h2>Загрузка данных</h2>
-            <input type="file" id="csvFile" accept=".csv">
-            <button onclick="upload()">Анализировать</button>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <input type="file" id="csvFile" name="file" accept=".csv">
+                <button type="button" onclick="upload()">Анализировать</button>
+            </form>
             <pre id="result"></pre>
         </div>
     </div>
@@ -64,10 +66,12 @@
 
         function upload() {
             const file = document.getElementById('csvFile').files[0];
+            const formData = new FormData();
+            formData.append('file', file);
             fetch('/upload', {
                 method: 'POST',
                 headers: { 'Authorization': `Basic ${authToken}` },
-                body: file
+                body: file  // Отправляем только файл напрямую
             })
             .then(response => response.json())
             .then(data => {
