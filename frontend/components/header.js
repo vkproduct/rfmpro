@@ -251,7 +251,7 @@ class HeaderComponent extends HTMLElement {
                         <a href="#pricing" class="nav-link">Тарифы</a>
                         <a href="#contact" class="nav-link">Контакты</a>
                         <button class="button secondary pricing-trigger">Тарифы</button>
-                        <button class="button primary">Войти</button>
+                        <button class="button primary auth-trigger">Войти</button>
                     </nav>
                     <div class="burger-menu">☰</div>
                 </div>
@@ -304,6 +304,7 @@ class HeaderComponent extends HTMLElement {
                     </div>
                 </div>
             </div>
+            <auth-component></auth-component>
         `;
 
         // Добавляем обработчики для мобильного меню
@@ -343,6 +344,20 @@ class HeaderComponent extends HTMLElement {
                 }));
                 modal.classList.remove('active');
             });
+        });
+
+        // Добавляем обработчики для авторизации
+        const authTrigger = this.shadowRoot.querySelector('.auth-trigger');
+        const authComponent = this.shadowRoot.querySelector('auth-component');
+
+        authTrigger.addEventListener('click', () => {
+            authComponent.open();
+        });
+
+        authComponent.addEventListener('auth-success', () => {
+            // Обновляем UI после успешной авторизации
+            authTrigger.textContent = 'Профиль';
+            authTrigger.classList.add('active');
         });
     }
 }

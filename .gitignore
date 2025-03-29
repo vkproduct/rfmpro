@@ -42,3 +42,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db 
+
+SUPABASE_URL=https://fttmouanpqislqfvvvpg.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0dG1vdWFucHFpc2xxZnZ2dnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4NDEyODUsImV4cCI6MjA1ODQxNzI4NX0.bYMXIY4M8vjbuqFNMBebQYqPe06wiemjDQTQxCBoDkI

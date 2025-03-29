@@ -6,6 +6,7 @@
     <title>RFM Pro - Анализ клиентской базы</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <header-component></header-component>
@@ -20,6 +21,28 @@
     </main>
     <footer-component></footer-component>
 
+    <script>
+        // Инициализация Supabase
+        const supabaseUrl = 'https://fttmouanpqislqfvvvpg.supabase.co';
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0dG1vdWFucHFpc2xxZnZ2dnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4NDEyODUsImV4cCI6MjA1ODQxNzI4NX0.bYMXIY4M8vjbuqFNMBebQYqPe06wiemjDQTQxCBoDkI';
+        window.supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+        // Проверка авторизации при загрузке
+        window.addEventListener('load', async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                const { data: { user }, error } = await window.supabase.auth.getUser(token);
+                if (user) {
+                    document.querySelector('header-component').dispatchEvent(
+                        new CustomEvent('auth-success')
+                    );
+                } else {
+                    localStorage.removeItem('token');
+                }
+            }
+        });
+    </script>
+
     <script src="components/header.js"></script>
     <script src="components/hero.js"></script>
     <script src="components/how-it-works.js"></script>
@@ -29,5 +52,6 @@
     <script src="components/results.js"></script>
     <script src="components/promo.js"></script>
     <script src="components/footer.js"></script>
+    <script src="components/auth.js"></script>
 </body>
 </html> 

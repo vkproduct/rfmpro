@@ -293,6 +293,12 @@ class UploadComponent extends HTMLElement {
                 return;
             }
 
+            const token = localStorage.getItem('token');
+            if (!token) {
+                showError('Пожалуйста, войдите в систему');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('client_id_col', clientIdCol);
@@ -301,20 +307,22 @@ class UploadComponent extends HTMLElement {
 
             try {
                 uploadBtn.disabled = true;
-                const response = await fetch('http://localhost:8000/upload', {
+                const response = await fetch('/upload', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
 
                 if (!response.ok) {
-                    throw new Error('Ошибка загрузки');
+                    throw new Error('Ошибка загрузки данных');
                 }
 
-                const result = await response.json();
-                showSuccess('Файл успешно загружен');
+                showSuccess('Данные успешно загружены');
                 this.dispatchEvent(new CustomEvent('upload-success'));
             } catch (error) {
-                showError('Ошибка при загрузке файла');
+                showError(error.message);
             } finally {
                 uploadBtn.disabled = false;
             }

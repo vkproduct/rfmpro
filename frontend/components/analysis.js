@@ -184,21 +184,37 @@ class AnalysisComponent extends HTMLElement {
     }
 
     async loadData() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            this.showError('Пожалуйста, войдите в систему');
+            return;
+        }
+
         try {
-            const response = await fetch('http://localhost:8000/analysis');
+            const response = await fetch('/analyze', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
             if (!response.ok) {
                 throw new Error('Ошибка загрузки данных');
             }
+
             const data = await response.json();
             this.updateUI(data);
         } catch (error) {
-            console.error('Ошибка:', error);
+            this.showError(error.message);
         }
     }
 
     updateUI(data) {
         // Обновление UI на основе полученных данных
         // Здесь будет код для обновления метрик и графиков
+    }
+
+    showError(message) {
+        // Здесь будет код для отображения ошибки пользователю
     }
 }
 

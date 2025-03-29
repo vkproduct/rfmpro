@@ -1,10 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from supabase import create_client, Client
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from supabase import create_client
 import pandas as pd
 import os
 from dotenv import load_dotenv
-from typing import Optional
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -14,99 +14,140 @@ app = FastAPI()
 # Настройка CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5500", "http://127.0.0.1:5500"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Инициализация Supabase клиента
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL", ""),
-    os.getenv("SUPABASE_KEY", "")
+# Инициализация Supabase
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
 )
+
+# Настройка безопасности
+security = HTTPBearer()
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        user = supabase.auth.get_user(credentials.credentials)
+        if user.error:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user.data.user.id
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
     client_id_col: str = None,
     date_col: str = None,
-    amount_col: str = None
+    amount_col: str = None,
+    user_id: str = Depends(get_current_user)
 ):
     try:
         # Чтение файла в зависимости от расширения
         if file.filename.endswith('.csv'):
             df = pd.read_csv(file.file)
-        elif file.filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(file.file)
         else:
-            raise HTTPException(status_code=400, detail="Неподдерживаемый формат файла")
+            df = pd.read_excel(file.file)
 
-        # Проверка наличия необходимых столбцов
+        # Проверка наличия необходимых колонок
         required_cols = [client_id_col, date_col, amount_col]
-        if not all(col in df.columns for col in required_cols):
-            raise HTTPException(status_code=400, detail="Отсутствуют необходимые столбцы")
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise HTTPException(status_code=400, detail=f"Missing columns: {', '.join(missing_cols)}")
 
-        # Подготовка данных для Supabase
-        records = df[[client_id_col, date_col, amount_col]].to_dict('records')
-        for record in records:
-            record['user_id'] = "user1"  # Временный user_id
-            record['client_id'] = str(record[client_id_col])
-            record['purchase_date'] = str(record[date_col])
-            record['amount'] = float(record[amount_col])
-            del record[client_id_col]
-            del record[date_col]
-            del record[amount_col]
+        # Подготовка данных
+        data = df[[client_id_col, date_col, amount_col]].rename(columns={
+            client_id_col: "client_id",
+            date_col: "date",
+            amount_col: "amount"
+        }).to_dict(orient="records")
+
+        # Добавление user_id к каждой записи
+        for record in data:
+            record["user_id"] = user_id
 
         # Сохранение в Supabase
-        result = supabase.table('purchases').insert(records).execute()
+        response = supabase.table("purchases").insert(data).execute()
         
-        return {"message": "Данные успешно загружены", "count": len(records)}
+        if response.error:
+            raise HTTPException(status_code=500, detail="Error saving data")
 
+        return {"message": "Данные успешно загружены"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analyze")
-async def analyze_data():
+async def analyze_data(user_id: str = Depends(get_current_user)):
     try:
-        # Получение данных из Supabase
-        result = supabase.table('purchases').select("*").eq('user_id', 'user1').execute()
-        df = pd.DataFrame(result.data)
-
-        if df.empty:
-            raise HTTPException(status_code=404, detail="Данные не найдены")
-
-        # RFM анализ
-        current_date = pd.Timestamp.now()
+        # Получение данных пользователя
+        response = supabase.table("purchases").select("*").eq("user_id", user_id).execute()
         
-        # Recency
-        df['purchase_date'] = pd.to_datetime(df['purchase_date'])
-        recency = df.groupby('client_id')['purchase_date'].max()
-        recency = (current_date - recency).dt.days
+        if response.error:
+            raise HTTPException(status_code=500, detail="Error fetching data")
 
-        # Frequency
-        frequency = df.groupby('client_id').size()
+        data = response.data
+        if not data:
+            return {
+                "message": "Нет данных для анализа",
+                "metrics": None,
+                "segments": None,
+                "trends": None
+            }
 
-        # Monetary
-        monetary = df.groupby('client_id')['amount'].sum()
-
-        # Объединение метрик
-        rfm = pd.DataFrame({
-            'Recency': recency,
-            'Frequency': frequency,
-            'Monetary': monetary
-        })
-
+        # Преобразование данных в DataFrame
+        df = pd.DataFrame(data)
+        
+        # Конвертация даты
+        df['date'] = pd.to_datetime(df['date'])
+        
+        # Расчет RFM метрик
+        now = pd.Timestamp.now()
+        rfm = df.groupby('client_id').agg({
+            'date': lambda x: (now - x.max()).days,
+            'amount': ['count', 'sum']
+        }).reset_index()
+        
+        rfm.columns = ['client_id', 'recency', 'frequency', 'monetary']
+        
         # Нормализация метрик
-        rfm['R_score'] = pd.qcut(rfm['Recency'], q=5, labels=[5, 4, 3, 2, 1])
-        rfm['F_score'] = pd.qcut(rfm['Frequency'], q=5, labels=[1, 2, 3, 4, 5])
-        rfm['M_score'] = pd.qcut(rfm['Monetary'], q=5, labels=[1, 2, 3, 4, 5])
-
+        rfm['r_score'] = pd.qcut(rfm['recency'], q=5, labels=[5, 4, 3, 2, 1])
+        rfm['f_score'] = pd.qcut(rfm['frequency'], q=5, labels=[1, 2, 3, 4, 5])
+        rfm['m_score'] = pd.qcut(rfm['monetary'], q=5, labels=[1, 2, 3, 4, 5])
+        
         # Расчет RFM score
-        rfm['RFM_Score'] = rfm['R_score'].astype(str) + rfm['F_score'].astype(str) + rfm['M_score'].astype(str)
-
-        return rfm.to_dict(orient='records')
-
+        rfm['rfm_score'] = rfm['r_score'].astype(str) + rfm['f_score'].astype(str) + rfm['m_score'].astype(str)
+        
+        # Сегментация
+        segments = {
+            'Champions': rfm[rfm['rfm_score'].isin(['555', '554', '544', '545', '454', '455', '445'])],
+            'Loyal Customers': rfm[rfm['rfm_score'].isin(['543', '444', '435', '355', '354', '345', '344', '335'])],
+            'At Risk': rfm[rfm['rfm_score'].isin(['332', '322', '231', '241', '251', '233', '234'])],
+            'Lost': rfm[rfm['rfm_score'].isin(['111', '112', '121', '122', '123', '132', '211', '212', '213', '221', '222', '223', '232'])],
+            'Other': rfm[~rfm['rfm_score'].isin(['555', '554', '544', '545', '454', '455', '445', '543', '444', '435', '355', '354', '345', '344', '335', '332', '322', '231', '241', '251', '233', '234', '111', '112', '121', '122', '123', '132', '211', '212', '213', '221', '222', '223', '232'])]
+        }
+        
+        # Подготовка результатов
+        result = {
+            "metrics": {
+                "total_customers": len(rfm),
+                "avg_recency": rfm['recency'].mean(),
+                "avg_frequency": rfm['frequency'].mean(),
+                "avg_monetary": rfm['monetary'].mean()
+            },
+            "segments": {
+                name: len(segment) for name, segment in segments.items()
+            },
+            "trends": {
+                "monthly_sales": df.groupby(df['date'].dt.to_period('M'))['amount'].sum().to_dict(),
+                "monthly_customers": df.groupby(df['date'].dt.to_period('M'))['client_id'].nunique().to_dict()
+            }
+        }
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
