@@ -75,11 +75,20 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return
                 
                 content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)  # Читаем бинарные данные файла
+                post_data = self.rfile.read(content_length)
                 with open("temp.csv", "wb") as f:
                     f.write(post_data)
                 
                 data = pd.read_csv("temp.csv")
+                required_columns = {'customer_id', 'order_date', 'order_amount'}
+                if not required_columns.issubset(data.columns):
+                    missing = required_columns - set(data.columns)
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": f"Отсутствуют колонки: {missing}"}).encode())
+                    return
+                
                 rfm_result = perform_rfm_analysis(data)
                 file_name = f"result_{int(datetime.now().timestamp())}.csv"
                 supabase.storage().from_('uploads').upload(file_name, open("temp.csv", 'rb'))
