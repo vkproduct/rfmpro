@@ -1,15 +1,15 @@
 import pandas as pd
 import numpy as np
 
-def perform_rfm_analysis(df):
-    df['order_date'] = pd.to_datetime(df['order_date'])
-    now = df['order_date'].max()
+def perform_rfm_analysis(df, customer_col, date_col, amount_col):
+    df[date_col] = pd.to_datetime(df[date_col])
+    now = df[date_col].max()
     
-    rfm = df.groupby('customer_id').agg({
-        'order_date': lambda x: (now - x.max()).days,
-        'order_amount': ['count', 'sum']
+    rfm = df.groupby(customer_col).agg({
+        date_col: lambda x: (now - x.max()).days,
+        amount_col: ['count', 'sum']
     }).reset_index()
-    rfm.columns = ['customer_id', 'recency', 'frequency', 'monetary']
+    rfm.columns = [customer_col, 'recency', 'frequency', 'monetary']
     
     rfm['r_score'] = pd.qcut(rfm['recency'], q=4, labels=[4, 3, 2, 1], duplicates='drop')
     rfm['f_score'] = pd.qcut(rfm['frequency'].rank(method='first'), q=4, labels=[1, 2, 3, 4], duplicates='drop')

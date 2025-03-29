@@ -33,13 +33,14 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            content_type = self.headers.get('Content-Type', '')
+
             if self.path == '/register':
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length).decode('utf-8')
-                data = dict(x.split('=') for x in post_data.split('&'))
+                data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = data.get('email')
                 password = data.get('password')
-                print(f"Регистрация: {email}")
                 supabase.table('users').insert({'email': email, 'password': password}).execute()
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -47,12 +48,9 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
 
             elif self.path == '/login':
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length).decode('utf-8')
-                data = dict(x.split('=') for x in post_data.split('&'))
+                data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = data.get('email')
                 password = data.get('password')
-                print(f"Вход: {email}")
                 user = supabase.table('users').select('*').eq('email', email).eq('password', password).execute()
                 if user.data and len(user.data) > 0:
                     auth = base64.b64encode(f"{email}:{password}".encode()).decode()
@@ -76,28 +74,45 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps({"status": "error", "message": "Требуется авторизация"}).encode())
                     return
                 
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                print(f"Получен файл размером: {content_length} байт")
+                # Разделяем multipart/form-data
+                boundary = content_type.split('boundary=')[1].encode()
+                parts = post_data.split(b'--' + boundary)
+                file_data = None
+                customer_col, date_col, amount_col = None, None, None
+                
+                for part in parts:
+                    if b'Content-Disposition: form-data' in part:
+                        if b'name="file"' in part:
+                            file_data = part.split(b'\r\n\r\n')[1].rsplit(b'\r\n', 1)[0]
+                        elif b'name="customer_col"' in part:
+                            customer_col = part.split(b'\r\n\r\n')[1].rsplit(b'\r\n', 1)[0].decode('utf-8')
+                        elif b'name="date_col"' in part:
+                            date_col = part.split(b'\r\n\r\n')[1].rsplit(b'\r\n', 1)[0].decode('utf-8')
+                        elif b'name="amount_col"' in part:
+                            amount_col = part.split(b'\r\n\r\n')[1].rsplit(b'\r\n', 1)[0].decode('utf-8')
+
+                if not file_data or not customer_col or not date_col or not amount_col:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "Не указаны все необходимые данные"}).encode())
+                    return
+                
                 with open("temp.csv", "wb") as f:
-                    f.write(post_data)
+                    f.write(file_data)
                 
                 data = pd.read_csv("temp.csv")
-                print(f"CSV прочитан: {data.columns.tolist()}")
-                required_columns = {'customer_id', 'order_date', 'order_amount'}
-                if not required_columns.issubset(data.columns):
-                    missing = required_columns - set(data.columns)
+                if not {customer_col, date_col, amount_col}.issubset(data.columns):
+                    missing = {customer_col, date_col, amount_col} - set(data.columns)
                     self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({"status": "error", "message": f"Отсутствуют колонки: {missing}"}).encode())
                     return
                 
-                rfm_result = perform_rfm_analysis(data)
+                rfm_result = perform_rfm_analysis(data, customer_col, date_col, amount_col)
                 file_name = f"result_{int(datetime.now().timestamp())}.csv"
-                print(f"Загрузка в Storage: {file_name}")
                 supabase.storage.from_('uploads').upload(file_name, open("temp.csv", 'rb'))
-                print(f"Вставка в rfm_results: {rfm_result}")
                 supabase.table('rfm_results').insert({'file_name': file_name, 'result': rfm_result}).execute()
                 
                 self.send_response(200)

@@ -24,7 +24,7 @@ h2 {
     color: #3498db;
     margin-bottom: 15px;
 }
-input {
+input, select {
     display: block;
     width: 100%;
     padding: 8px;
