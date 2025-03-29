@@ -9,71 +9,155 @@ class UploadComponent extends HTMLElement {
             <style>
                 :host {
                     display: block;
-                    max-width: 800px;
-                    margin: 2rem auto;
-                    padding: 2rem;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                .section-header {
+                    text-align: center;
+                    margin-bottom: var(--spacing-xl);
+                }
+                .section-header h2 {
+                    font-size: 2.5rem;
+                    font-weight: 700;
+                    margin-bottom: var(--spacing-md);
+                    letter-spacing: -0.02em;
+                }
+                .section-header p {
+                    font-size: 1.5rem;
+                    color: var(--text-light);
+                    max-width: 600px;
+                    margin: 0 auto;
+                    line-height: 1.4;
                 }
                 .upload-area {
-                    border: 2px dashed #ddd;
-                    border-radius: 8px;
-                    padding: 2rem;
+                    border: 2px dashed var(--border);
+                    border-radius: var(--radius-lg);
+                    padding: var(--spacing-xl);
                     text-align: center;
+                    background: var(--background-alt);
+                    transition: all 0.2s ease;
                     cursor: pointer;
-                    transition: all 0.3s;
                 }
                 .upload-area:hover {
-                    border-color: #FF5A5F;
+                    border-color: var(--primary);
+                    background: var(--background);
+                    transform: translateY(-1px);
                 }
                 .upload-area.dragover {
-                    border-color: #FF5A5F;
-                    background: rgba(255,90,95,0.1);
+                    border-color: var(--primary);
+                    background: var(--background);
+                    transform: translateY(-1px);
                 }
                 .file-input {
                     display: none;
                 }
+                .upload-icon {
+                    font-size: 3rem;
+                    margin-bottom: var(--spacing-md);
+                    color: var(--primary);
+                }
+                .upload-text {
+                    font-size: 1.5rem;
+                    color: var(--text);
+                    margin-bottom: var(--spacing-sm);
+                    font-weight: 500;
+                }
+                .upload-subtext {
+                    color: var(--text-light);
+                    font-size: 1.125rem;
+                }
                 .column-select {
                     display: none;
-                    margin-top: 2rem;
+                    margin-top: var(--spacing-xl);
+                    background: var(--background);
+                    padding: var(--spacing-lg);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow);
+                    transition: all 0.2s ease;
+                    border: 1px solid var(--border);
                 }
                 .column-select.active {
                     display: block;
+                    animation: fadeIn 0.3s ease-out;
+                }
+                .column-select h3 {
+                    font-size: 1.75rem;
+                    font-weight: 600;
+                    margin-bottom: var(--spacing-lg);
+                    color: var(--text);
+                    letter-spacing: -0.02em;
                 }
                 select {
                     width: 100%;
-                    padding: 0.5rem;
-                    margin: 0.5rem 0;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                }
-                button {
-                    background: #FF5A5F;
-                    color: white;
-                    border: none;
-                    padding: 0.8rem 1.5rem;
-                    border-radius: 4px;
+                    padding: var(--spacing-md);
+                    margin: var(--spacing-sm) 0;
+                    border: 2px solid var(--border);
+                    border-radius: var(--radius);
+                    background: var(--background);
+                    color: var(--text);
+                    font-size: 1.125rem;
                     cursor: pointer;
-                    font-weight: 500;
-                    transition: background 0.3s;
+                    transition: all 0.2s ease;
+                    font-family: var(--font-sans);
                 }
-                button:hover {
-                    background: #ff4449;
+                select:hover {
+                    border-color: var(--primary);
                 }
-                button:disabled {
-                    background: #ccc;
-                    cursor: not-allowed;
+                select:focus {
+                    outline: none;
+                    border-color: var(--primary);
+                    box-shadow: 0 0 0 3px rgba(255, 90, 95, 0.1);
+                }
+                .button {
+                    width: 100%;
+                    padding: var(--spacing-md);
+                    margin-top: var(--spacing-lg);
+                    font-size: 1.125rem;
                 }
                 .error {
-                    color: #ff4449;
-                    margin-top: 1rem;
+                    color: var(--primary);
+                    margin-top: var(--spacing-md);
+                    padding: var(--spacing-md);
+                    background: #FFF1F3;
+                    border-radius: var(--radius);
+                    display: none;
+                    font-size: 1.125rem;
+                }
+                .error.visible {
+                    display: block;
+                    animation: fadeIn 0.3s ease-out;
+                }
+                .success {
+                    color: #34C759;
+                    margin-top: var(--spacing-md);
+                    padding: var(--spacing-md);
+                    background: #F0FFF4;
+                    border-radius: var(--radius);
+                    display: none;
+                    font-size: 1.125rem;
+                }
+                .success.visible {
+                    display: block;
+                    animation: fadeIn 0.3s ease-out;
+                }
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
             </style>
+            <div class="section-header">
+                <h2>Загрузите данные</h2>
+                <p>Выберите CSV или Excel файл с данными о покупках ваших клиентов</p>
+            </div>
             <div class="upload-area">
                 <input type="file" class="file-input" accept=".csv,.xlsx,.xls">
-                <p>Перетащите файл сюда или кликните для выбора</p>
-                <p>Поддерживаемые форматы: CSV, Excel</p>
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Перетащите файл сюда или кликните для выбора</div>
+                <div class="upload-subtext">Поддерживаемые форматы: CSV, Excel</div>
             </div>
             <div class="column-select">
                 <h3>Выберите столбцы</h3>
@@ -86,16 +170,18 @@ class UploadComponent extends HTMLElement {
                 <select class="amount-select">
                     <option value="">Сумма покупки</option>
                 </select>
-                <button class="upload-btn">Загрузить</button>
+                <button class="button primary">Загрузить</button>
             </div>
             <div class="error"></div>
+            <div class="success"></div>
         `;
 
         const uploadArea = this.shadowRoot.querySelector('.upload-area');
         const fileInput = this.shadowRoot.querySelector('.file-input');
         const columnSelect = this.shadowRoot.querySelector('.column-select');
-        const uploadBtn = this.shadowRoot.querySelector('.upload-btn');
+        const uploadBtn = this.shadowRoot.querySelector('.button');
         const errorDiv = this.shadowRoot.querySelector('.error');
+        const successDiv = this.shadowRoot.querySelector('.success');
 
         // Drag and drop
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -154,6 +240,7 @@ class UploadComponent extends HTMLElement {
                             if (data.length > 0) {
                                 populateColumnSelects(data[0]);
                                 columnSelect.classList.add('active');
+                                showSuccess('Файл успешно загружен');
                             }
                         } catch (error) {
                             showError('Ошибка при чтении файла');
@@ -186,6 +273,14 @@ class UploadComponent extends HTMLElement {
 
         function showError(message) {
             errorDiv.textContent = message;
+            errorDiv.classList.add('visible');
+            successDiv.classList.remove('visible');
+        }
+
+        function showSuccess(message) {
+            successDiv.textContent = message;
+            successDiv.classList.add('visible');
+            errorDiv.classList.remove('visible');
         }
 
         uploadBtn.addEventListener('click', async () => {
@@ -216,7 +311,7 @@ class UploadComponent extends HTMLElement {
                 }
 
                 const result = await response.json();
-                showError('Файл успешно загружен');
+                showSuccess('Файл успешно загружен');
                 this.dispatchEvent(new CustomEvent('upload-success'));
             } catch (error) {
                 showError('Ошибка при загрузке файла');

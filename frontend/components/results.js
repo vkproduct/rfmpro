@@ -1,4 +1,4 @@
-class AnalysisComponent extends HTMLElement {
+class ResultsComponent extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
@@ -27,13 +27,13 @@ class AnalysisComponent extends HTMLElement {
                     margin: 0 auto;
                     line-height: 1.4;
                 }
-                .analysis-grid {
+                .results-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
                     gap: var(--spacing-lg);
                     margin-top: var(--spacing-xl);
                 }
-                .analysis-card {
+                .result-card {
                     background: var(--background);
                     border-radius: var(--radius-lg);
                     padding: var(--spacing-lg);
@@ -41,7 +41,7 @@ class AnalysisComponent extends HTMLElement {
                     transition: all 0.2s ease;
                     border: 1px solid var(--border);
                 }
-                .analysis-card:hover {
+                .result-card:hover {
                     transform: translateY(-2px);
                     box-shadow: var(--shadow-lg);
                 }
@@ -68,7 +68,7 @@ class AnalysisComponent extends HTMLElement {
                 }
                 .metrics-grid {
                     display: grid;
-                    grid-template-columns: repeat(3, 1fr);
+                    grid-template-columns: repeat(2, 1fr);
                     gap: var(--spacing-md);
                     margin-top: var(--spacing-lg);
                 }
@@ -120,6 +120,35 @@ class AnalysisComponent extends HTMLElement {
                     background: var(--primary-hover);
                     transform: translateY(-1px);
                 }
+                .table-container {
+                    margin-top: var(--spacing-lg);
+                    overflow-x: auto;
+                    border-radius: var(--radius);
+                    box-shadow: var(--shadow);
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    background: var(--background);
+                }
+                th, td {
+                    padding: var(--spacing-md);
+                    text-align: left;
+                    border-bottom: 1px solid var(--border);
+                }
+                th {
+                    background: var(--background-alt);
+                    font-weight: 600;
+                    color: var(--text);
+                    font-size: 1.125rem;
+                }
+                td {
+                    color: var(--text-light);
+                    font-size: 1.125rem;
+                }
+                tr:hover {
+                    background: var(--background-alt);
+                }
                 @media (max-width: 768px) {
                     .metrics-grid {
                         grid-template-columns: 1fr;
@@ -127,44 +156,40 @@ class AnalysisComponent extends HTMLElement {
                 }
             </style>
             <div class="section-header">
-                <h2>Анализ данных</h2>
-                <p>Получите подробный анализ вашей клиентской базы</p>
+                <h2>Результаты анализа</h2>
+                <p>Подробная информация о вашей клиентской базе</p>
             </div>
-            <div class="analysis-grid">
-                <div class="analysis-card">
+            <div class="results-grid">
+                <div class="result-card">
                     <div class="card-header">
                         <div class="card-icon">📊</div>
-                        <div class="card-title">RFM-метрики</div>
+                        <div class="card-title">Общая статистика</div>
                     </div>
                     <div class="card-content">
                         <div class="metrics-grid">
                             <div class="metric-card">
+                                <div class="metric-value">1,234</div>
+                                <div class="metric-label">Всего клиентов</div>
+                            </div>
+                            <div class="metric-card">
                                 <div class="metric-value">4.2</div>
-                                <div class="metric-label">Recency</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-value">3.8</div>
-                                <div class="metric-label">Frequency</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-value">4.5</div>
-                                <div class="metric-label">Monetary</div>
+                                <div class="metric-label">Средний RFM</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="analysis-card">
+                <div class="result-card">
                     <div class="card-header">
                         <div class="card-icon">🎯</div>
-                        <div class="card-title">Сегментация</div>
+                        <div class="card-title">Сегменты</div>
                     </div>
                     <div class="card-content">
                         <div class="chart-container">
-                            <!-- Здесь будет график сегментации -->
+                            <!-- Здесь будет график сегментов -->
                         </div>
                     </div>
                 </div>
-                <div class="analysis-card">
+                <div class="result-card">
                     <div class="card-header">
                         <div class="card-icon">📈</div>
                         <div class="card-title">Тренды</div>
@@ -176,6 +201,23 @@ class AnalysisComponent extends HTMLElement {
                     </div>
                 </div>
             </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID клиента</th>
+                            <th>Recency</th>
+                            <th>Frequency</th>
+                            <th>Monetary</th>
+                            <th>RFM Score</th>
+                            <th>Сегмент</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Здесь будут данные таблицы -->
+                    </tbody>
+                </table>
+            </div>
             <button class="button primary">Скачать отчет</button>
         `;
 
@@ -185,7 +227,7 @@ class AnalysisComponent extends HTMLElement {
 
     async loadData() {
         try {
-            const response = await fetch('http://localhost:8000/analysis');
+            const response = await fetch('http://localhost:8000/results');
             if (!response.ok) {
                 throw new Error('Ошибка загрузки данных');
             }
@@ -198,8 +240,8 @@ class AnalysisComponent extends HTMLElement {
 
     updateUI(data) {
         // Обновление UI на основе полученных данных
-        // Здесь будет код для обновления метрик и графиков
+        // Здесь будет код для обновления метрик, графиков и таблицы
     }
 }
 
-customElements.define('analysis-component', AnalysisComponent); 
+customElements.define('results-component', ResultsComponent); 
