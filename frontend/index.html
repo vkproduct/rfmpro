@@ -2,36 +2,78 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>RFM Анализ для e-commerce</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFM Анализатор</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
-        <h1>RFM Анализ с ИИ для вашего бизнеса</h1>
+        <h1>RFM Анализатор</h1>
         <nav>
-            <a href="login.html">Войти</a>
-            <a href="#pricing">Тарифы</a>
+            <a href="index.html">Главная</a>
+            <a href="login.html">Вход</a>
+            <a href="register.html">Регистрация</a>
         </nav>
     </header>
-    <section>
+
+    <main>
         <h2>Что это такое?</h2>
-        <p>Наш сервис помогает продавцам, маркетологам и продакт-менеджерам анализировать клиентскую базу с помощью RFM-анализа (Recency, Frequency, Monetary). Загрузите свои данные и получите готовые сегменты клиентов!</p>
-    </section>
-    <section>
-        <h2>Зачем это нужно?</h2>
+        <p>RFM-анализ - это метод анализа поведения клиентов, основанный на трех ключевых показателях:</p>
         <ul>
-            <li>Выявляйте лучших клиентов.</li>
-            <li>Оптимизируйте маркетинговые кампании.</li>
-            <li>Повышайте продажи с помощью данных.</li>
+            <li><strong>Recency (Недавность)</strong> - когда клиент последний раз совершал покупку</li>
+            <li><strong>Frequency (Частота)</strong> - как часто клиент совершает покупки</li>
+            <li><strong>Monetary (Денежная ценность)</strong> - сколько денег клиент тратит</li>
         </ul>
-    </section>
-    <section id="pricing">
+        <p>Наш сервис поможет вам:</p>
+        <ul>
+            <li>Загрузить данные о транзакциях клиентов</li>
+            <li>Автоматически рассчитать RFM-метрики</li>
+            <li>Сегментировать клиентов по их поведению</li>
+            <li>Получить рекомендации по работе с каждым сегментом</li>
+        </ul>
+    </main>
+
+    <section class="pricing">
         <h2>Тарифы</h2>
-        <div class="pricing">
-            <div>Бесплатный: до 100 записей</div>
-            <div>Стандарт: до 10 000 записей — $10/мес</div>
-            <div>Премиум: без ограничений — $25/мес</div>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>Бесплатный</h3>
+                <p class="price">0 ₽</p>
+                <ul>
+                    <li>До 100 записей</li>
+                    <li>Базовый RFM-анализ</li>
+                    <li>CSV и Excel файлы</li>
+                </ul>
+                <a href="register.html" class="button">Начать бесплатно</a>
+            </div>
+            <div class="pricing-card featured">
+                <h3>Про</h3>
+                <p class="price">999 ₽/мес</p>
+                <ul>
+                    <li>До 10,000 записей</li>
+                    <li>Расширенный анализ</li>
+                    <li>API доступ</li>
+                    <li>Приоритетная поддержка</li>
+                </ul>
+                <a href="register.html" class="button">Выбрать Про</a>
+            </div>
+            <div class="pricing-card">
+                <h3>Бизнес</h3>
+                <p class="price">4,999 ₽/мес</p>
+                <ul>
+                    <li>Безлимитное количество записей</li>
+                    <li>Полный анализ</li>
+                    <li>API доступ</li>
+                    <li>24/7 поддержка</li>
+                    <li>Интеграция с CRM</li>
+                </ul>
+                <a href="register.html" class="button">Выбрать Бизнес</a>
+            </div>
         </div>
     </section>
+
+    <footer>
+        <p>&copy; 2024 RFM Анализатор. Все права защищены.</p>
+    </footer>
 </body>
 </html> 

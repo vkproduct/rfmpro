@@ -1,118 +1,151 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, Any
+from datetime import datetime
 
 def perform_rfm_analysis(
     df: pd.DataFrame,
-    date_column: str,
-    amount_column: str,
-    customer_column: str
-) -> Dict[str, Any]:
+    date_column: str = 'order_date',
+    amount_column: str = 'order_amount',
+    customer_column: str = 'customer_id'
+) -> dict:
     """
-    Выполняет RFM-анализ на основе предоставленных данных.
+    Выполняет RFM-анализ на основе транзакционных данных.
     
     Args:
-        df: DataFrame с данными транзакций
-        date_column: Название колонки с датами
-        amount_column: Название колонки с суммами
-        customer_column: Название колонки с ID клиентов
+        df (pd.DataFrame): DataFrame с транзакционными данными
+        date_column (str): Название колонки с датой транзакции
+        amount_column (str): Название колонки с суммой транзакции
+        customer_column (str): Название колонки с идентификатором клиента
     
     Returns:
-        Dict с результатами анализа
+        dict: Результаты RFM-анализа, включая метрики и сегментацию
+        
+    Raises:
+        ValueError: Если отсутствуют необходимые колонки или данные некорректны
     """
-    # Конвертируем даты
-    df[date_column] = pd.to_datetime(df[date_column])
+    # Валидация входных данных
+    required_columns = {date_column, amount_column, customer_column}
+    if not required_columns.issubset(df.columns):
+        raise ValueError(f"Отсутствуют колонки: {required_columns - set(df.columns)}")
     
-    # Получаем текущую дату
-    current_date = df[date_column].max()
+    # Проверка на пустые значения
+    if df[required_columns].isnull().any().any():
+        raise ValueError("В данных присутствуют пустые значения")
     
-    # Рассчитываем RFM метрики
+    # Проверка типов данных
+    if not pd.api.types.is_numeric_dtype(df[amount_column]):
+        raise ValueError(f"Колонка {amount_column} должна содержать числовые значения")
+    
+    # Конвертация даты
+    try:
+        df[date_column] = pd.to_datetime(df[date_column])
+    except Exception as e:
+        raise ValueError(f"Ошибка конвертации даты: {str(e)}")
+    
+    # Расчет метрик
+    now = datetime.now()
+    
+    # Recency (дни с последней транзакции)
     rfm = df.groupby(customer_column).agg({
-        date_column: lambda x: (current_date - x.max()).days,  # Recency
-        customer_column: 'count',  # Frequency
-        amount_column: 'sum'  # Monetary
-    }).rename(columns={
-        date_column: 'recency',
-        customer_column: 'frequency',
-        amount_column: 'monetary'
-    })
+        date_column: lambda x: (now - x.max()).days,
+        amount_column: ['count', 'sum']
+    }).reset_index()
+    
+    rfm.columns = [customer_column, 'recency', 'frequency', 'monetary']
     
     # Нормализация метрик
-    rfm['r_score'] = pd.qcut(rfm['recency'], q=5, labels=[5, 4, 3, 2, 1])
-    rfm['f_score'] = pd.qcut(rfm['frequency'], q=5, labels=[1, 2, 3, 4, 5])
-    rfm['m_score'] = pd.qcut(rfm['monetary'], q=5, labels=[1, 2, 3, 4, 5])
+    rfm['recency'] = rfm['recency'].astype(float)
+    rfm['frequency'] = rfm['frequency'].astype(float)
+    rfm['monetary'] = rfm['monetary'].astype(float)
     
-    # Рассчитываем RFM score
+    # Расчет RFM-баллов (4 квантиля)
+    try:
+        rfm['r_score'] = pd.qcut(rfm['recency'], q=4, labels=[4, 3, 2, 1])
+    except ValueError:
+        rfm['r_score'] = 1  # Минимальный балл при ошибке
+    
+    try:
+        rfm['f_score'] = pd.qcut(rfm['frequency'].rank(method='first'), q=4, labels=[1, 2, 3, 4])
+    except ValueError:
+        rfm['f_score'] = 1  # Минимальный балл при ошибке
+    
+    try:
+        rfm['m_score'] = pd.qcut(rfm['monetary'], q=4, labels=[1, 2, 3, 4])
+    except ValueError:
+        rfm['m_score'] = 1  # Минимальный балл при ошибке
+    
+    # Расчет общего RFM-балла
     rfm['rfm_score'] = rfm['r_score'].astype(str) + rfm['f_score'].astype(str) + rfm['m_score'].astype(str)
     
     # Сегментация клиентов
     def segment_customers(row):
         rfm_score = int(row['rfm_score'])
-        if rfm_score >= 555:
+        if rfm_score >= 444:
             return 'champions'
-        elif rfm_score >= 444:
-            return 'loyal'
         elif rfm_score >= 333:
+            return 'loyal'
+        elif rfm_score >= 222:
             return 'at_risk'
         else:
             return 'lost'
     
     rfm['segment'] = rfm.apply(segment_customers, axis=1)
     
-    # Подсчет статистики по сегментам
-    segment_stats = rfm['segment'].value_counts()
-    total_customers = len(rfm)
+    # Расчет статистики по сегментам
+    segment_stats = rfm.groupby('segment').agg({
+        customer_column: 'count',
+        'monetary': ['mean', 'sum'],
+        'frequency': 'mean'
+    }).round(2)
     
-    # Формируем результат
+    # Форматирование результатов
     result = {
-        "summary": {
-            "total_customers": total_customers,
-            "segments": {
-                segment: {
-                    "count": int(count),
-                    "percentage": round(count / total_customers * 100, 2)
-                }
-                for segment, count in segment_stats.items()
-            }
+        'summary': {
+            'total_customers': len(rfm),
+            'total_revenue': rfm['monetary'].sum(),
+            'avg_order_value': rfm['monetary'].mean(),
+            'avg_frequency': rfm['frequency'].mean(),
+            'avg_recency': rfm['recency'].mean()
         },
-        "metrics": {
-            "recency": {
-                "mean": float(rfm['recency'].mean()),
-                "median": float(rfm['recency'].median())
+        'segments': {
+            segment: {
+                'count': int(segment_stats.loc[segment, (customer_column, 'count')]),
+                'avg_revenue': float(segment_stats.loc[segment, ('monetary', 'mean')]),
+                'total_revenue': float(segment_stats.loc[segment, ('monetary', 'sum')]),
+                'avg_frequency': float(segment_stats.loc[segment, ('frequency', 'mean')])
+            }
+            for segment in segment_stats.index
+        },
+        'metrics': {
+            'recency': {
+                'mean': float(rfm['recency'].mean()),
+                'median': float(rfm['recency'].median()),
+                'std': float(rfm['recency'].std())
             },
-            "frequency": {
-                "mean": float(rfm['frequency'].mean()),
-                "median": float(rfm['frequency'].median())
+            'frequency': {
+                'mean': float(rfm['frequency'].mean()),
+                'median': float(rfm['frequency'].median()),
+                'std': float(rfm['frequency'].std())
             },
-            "monetary": {
-                "mean": float(rfm['monetary'].mean()),
-                "median": float(rfm['monetary'].median())
+            'monetary': {
+                'mean': float(rfm['monetary'].mean()),
+                'median': float(rfm['monetary'].median()),
+                'std': float(rfm['monetary'].std())
             }
         }
     }
     
-    return result 
+    return result
 
+# Для обратной совместимости
 def calculate_rfm(data):
-    # Предполагаем, что в CSV есть колонки: customer_id, order_date, order_amount
-    data['order_date'] = pd.to_datetime(data['order_date'])
-    latest_date = data['order_date'].max()
-    
-    rfm = data.groupby('customer_id').agg({
-        'order_date': lambda x: (latest_date - x.max()).days,  # Recency
-        'customer_id': 'count',                                # Frequency
-        'order_amount': 'sum'                                  # Monetary
-    }).rename(columns={
-        'order_date': 'recency',
-        'customer_id': 'frequency',
-        'order_amount': 'monetary'
-    })
-    
-    # Квантили для сегментации
-    rfm['r_score'] = pd.qcut(rfm['recency'], 4, labels=[4, 3, 2, 1])
-    rfm['f_score'] = pd.qcut(rfm['frequency'].rank(method='first'), 4, labels=[1, 2, 3, 4])
-    rfm['m_score'] = pd.qcut(rfm['monetary'], 4, labels=[1, 2, 3, 4])
-    
-    rfm['rfm_score'] = rfm['r_score'].astype(str) + rfm['f_score'].astype(str) + rfm['m_score'].astype(str)
-    return rfm 
+    """
+    Устаревшая функция для обратной совместимости.
+    Использует perform_rfm_analysis с предустановленными именами колонок.
+    """
+    return perform_rfm_analysis(
+        data,
+        date_column='order_date',
+        amount_column='order_amount',
+        customer_column='customer_id'
+    ) 
