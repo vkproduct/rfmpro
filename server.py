@@ -8,8 +8,10 @@ from dotenv import load_dotenv
 import base64
 import json
 import logging
+import re
 from datetime import datetime
 import urllib.parse
+import io
 
 # Настройка логирования
 logging.basicConfig(
@@ -78,46 +80,96 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def parse_form_data(self, post_data, content_type):
         """Разбор формы в зависимости от типа контента"""
-        if 'application/x-www-form-urlencoded' in content_type:
-            return dict(urllib.parse.parse_qsl(post_data.decode('utf-8')))
-        elif 'multipart/form-data' in content_type:
-            boundary = content_type.split('boundary=')[1].encode()
-            parts = post_data.split(b'--' + boundary)
-            form_data = {}
-            file_data = None
-            
-            for part in parts:
-                if b'Content-Disposition: form-data' in part:
-                    lines = part.split(b'\r\n')
-                    disposition = next((line for line in lines if b'Content-Disposition' in line), b'')
-                    
-                    # Извлечение имени поля
-                    name_match = None
-                    if b'name="' in disposition:
-                        name_start = disposition.find(b'name="') + 6
-                        name_end = disposition.find(b'"', name_start)
-                        name = disposition[name_start:name_end].decode('utf-8')
-                    else:
-                        continue
-                    
-                    # Проверка на файл
-                    if b'filename="' in disposition:
-                        # Извлекаем содержимое файла
-                        file_start = part.find(b'\r\n\r\n') + 4
-                        file_end = part.rfind(b'\r\n--')
-                        if file_end > file_start:
-                            file_data = part[file_start:file_end]
-                            form_data[name] = file_data
-                    else:
-                        # Извлекаем обычное поле формы
-                        content_start = part.find(b'\r\n\r\n') + 4
-                        content_end = part.rfind(b'\r\n--')
-                        if content_end > content_start:
-                            form_data[name] = part[content_start:content_end].decode('utf-8').strip()
-            
-            return form_data, file_data
+        logger.info(f"Парсинг данных с Content-Type: {content_type}")
         
-        return None, None
+        if 'application/x-www-form-urlencoded' in content_type:
+            return dict(urllib.parse.parse_qsl(post_data.decode('utf-8'))), None
+        elif 'multipart/form-data' in content_type:
+            try:
+                boundary = content_type.split('boundary=')[1].encode()
+                logger.info(f"Обнаружена граница: {boundary}")
+                parts = post_data.split(b'--' + boundary)
+                logger.info(f"Разделено {len(parts)} частей")
+                
+                form_data = {}
+                file_data = None
+                
+                for i, part in enumerate(parts):
+                    if i == 0 or i == len(parts) - 1:  # Пропускаем первую и последнюю "пустые" части
+                        continue
+                        
+                    if b'Content-Disposition: form-data' in part:
+                        # Ищем имя поля
+                        disposition_line = next((line for line in part.split(b'\r\n') if b'Content-Disposition' in line), None)
+                        if not disposition_line:
+                            continue
+                            
+                        logger.info(f"Анализ части {i}: {disposition_line}")
+                        
+                        # Получаем имя поля
+                        name_match = re.search(b'name="([^"]*)"', disposition_line)
+                        if not name_match:
+                            continue
+                            
+                        field_name = name_match.group(1).decode('utf-8')
+                        logger.info(f"Обнаружено поле: {field_name}")
+                        
+                        # Проверяем, файл ли это
+                        is_file = b'filename="' in disposition_line
+                        
+                        # Ищем начало и конец содержимого
+                        content_start = part.find(b'\r\n\r\n')
+                        if content_start == -1:
+                            continue
+                            
+                        content_start += 4  # длина '\r\n\r\n'
+                        content = part[content_start:]
+                        
+                        # Удаляем концевые \r\n
+                        if content.endswith(b'\r\n'):
+                            content = content[:-2]
+                        
+                        if is_file:
+                            logger.info(f"Обнаружены данные файла в поле {field_name}, размер: {len(content)} байт")
+                            file_data = content
+                            form_data[field_name] = "FILE_DATA_PRESENT"  # Метка наличия файла
+                        else:
+                            try:
+                                value = content.decode('utf-8')
+                                form_data[field_name] = value
+                                logger.info(f"Поле {field_name} = {value}")
+                            except UnicodeDecodeError:
+                                logger.warning(f"Не удалось декодировать содержимое поля {field_name}")
+                
+                logger.info(f"Извлечено полей: {len(form_data)}, наличие файла: {file_data is not None}")
+                return form_data, file_data
+            except Exception as e:
+                logger.error(f"Ошибка при разборе multipart/form-data: {str(e)}")
+                return {}, None
+        elif 'application/json' in content_type:
+            try:
+                json_data = json.loads(post_data.decode('utf-8'))
+                logger.info(f"Получены JSON-данные: {list(json_data.keys())}")
+                
+                file_data = None
+                if 'file_data' in json_data:
+                    try:
+                        file_data = base64.b64decode(json_data['file_data'])
+                        logger.info(f"Декодированы base64-данные файла, размер: {len(file_data)} байт")
+                        # Удаляем из JSON чтобы не дублировать в логах
+                        json_data_for_log = dict(json_data)
+                        json_data_for_log['file_data'] = f"BASE64_DATA ({len(json_data['file_data'])} символов)"
+                        logger.info(f"JSON-данные: {json_data_for_log}")
+                    except Exception as e:
+                        logger.error(f"Ошибка декодирования base64-данных: {str(e)}")
+                
+                return json_data, file_data
+            except json.JSONDecodeError as e:
+                logger.error(f"Ошибка декодирования JSON: {str(e)}")
+                return {}, None
+        
+        logger.warning(f"Неподдерживаемый тип контента: {content_type}")
+        return {}, None
 
     def do_POST(self):
         """Обработка POST-запросов"""
@@ -225,59 +277,49 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return
                 
                 # Принимаем как multipart/form-data, так и application/json
-                if 'multipart/form-data' in content_type:
+                if 'multipart/form-data' in content_type or 'application/json' in content_type:
                     form_data, file_data = self.parse_form_data(post_data, content_type)
                     
+                    # Определяем названия колонок из запроса
                     customer_col = form_data.get('customer_col')
                     date_col = form_data.get('date_col')
                     amount_col = form_data.get('amount_col')
-                elif 'application/json' in content_type:
-                    try:
-                        json_data = json.loads(post_data.decode('utf-8'))
-                        file_data = None
-                        
-                        # Проверяем, есть ли base64-данные файла
-                        if 'file_data' in json_data and json_data['file_data']:
-                            try:
-                                file_data = base64.b64decode(json_data['file_data'])
-                            except Exception as e:
-                                logger.error(f"Ошибка декодирования base64-данных: {str(e)}")
-                        
-                        customer_col = json_data.get('customer_col', 'customer_id')  # Значения по умолчанию
-                        date_col = json_data.get('date_col', 'date')
-                        amount_col = json_data.get('amount_col', 'amount')
-                    except json.JSONDecodeError as e:
+                    
+                    # Если не указаны поля, используем значения по умолчанию
+                    if not customer_col:
+                        customer_col = 'customer_id'
+                        logger.info("Используется колонка клиента по умолчанию: customer_id")
+                    
+                    if not date_col:
+                        date_col = 'date'
+                        logger.info("Используется колонка даты по умолчанию: date")
+                    
+                    if not amount_col:
+                        amount_col = 'amount'
+                        logger.info("Используется колонка суммы по умолчанию: amount")
+                    
+                    # Проверяем наличие файла
+                    if not file_data:
+                        # Проверяем, был ли загружен файл через field с именем 'file'
+                        if isinstance(form_data.get('file'), bytes):
+                            file_data = form_data.get('file')
+                            logger.info(f"Файл найден в поле 'file', размер: {len(file_data)} байт")
+                    
+                    if not file_data:
                         self.send_json_response(400, {
                             "status": "error", 
-                            "message": f"Некорректный JSON: {str(e)}"
+                            "message": "Отсутствует файл с данными. Убедитесь, что вы отправляете файл в поле 'file' или в формате base64 в поле 'file_data'"
                         })
                         return
+                    
+                    # Логируем информацию для отладки
+                    logger.info(f"Получены данные: customer_col={customer_col}, date_col={date_col}, amount_col={amount_col}")
+                    logger.info(f"Размер файла данных: {len(file_data)} байт")
                 else:
                     self.send_json_response(415, {
                         "status": "error", 
                         "message": "Поддерживаются типы контента: multipart/form-data или application/json"
                     })
-                    return
-                
-                # Если не указаны поля, используем значения по умолчанию
-                if not customer_col:
-                    customer_col = 'customer_id'
-                    logger.info("Используется колонка клиента по умолчанию: customer_id")
-                
-                if not date_col:
-                    date_col = 'date'
-                    logger.info("Используется колонка даты по умолчанию: date")
-                
-                if not amount_col:
-                    amount_col = 'amount'
-                    logger.info("Используется колонка суммы по умолчанию: amount")
-                
-                if not file_data:
-                    self.send_json_response(400, {
-                        "status": "error", 
-                        "message": "Отсутствует файл с данными"
-                    })
-                    return
                 
                 # Сохранение файла
                 temp_file_path = f"temp_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
@@ -287,23 +329,81 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     
                     logger.info(f"Сохранён файл {temp_file_path} размером {len(file_data)} байт")
                     
-                    # Чтение CSV с явными параметрами
-                    try:
-                        data = pd.read_csv(
+                    # Пробуем разные способы чтения файла
+                    read_methods = [
+                        # Стандартный способ
+                        lambda: pd.read_csv(
                             temp_file_path, 
-                            sep=',',  # Явно указываем разделитель
-                            encoding='utf-8',  # Указываем кодировку
-                            quotechar='"',  # Символ кавычек для текстовых значений
-                            escapechar='\\',  # Escape-символ
-                            low_memory=False  # Отключаем режим экономии памяти для больших файлов
+                            sep=',',
+                            encoding='utf-8',
+                            quotechar='"',
+                            escapechar='\\',
+                            low_memory=False
+                        ),
+                        # С другим разделителем
+                        lambda: pd.read_csv(
+                            temp_file_path, 
+                            sep=';',
+                            encoding='utf-8',
+                            quotechar='"',
+                            escapechar='\\',
+                            low_memory=False
+                        ),
+                        # С другой кодировкой
+                        lambda: pd.read_csv(
+                            temp_file_path, 
+                            sep=',',
+                            encoding='latin1',
+                            quotechar='"',
+                            escapechar='\\',
+                            low_memory=False
+                        ),
+                        # Прямо из памяти
+                        lambda: pd.read_csv(
+                            io.BytesIO(file_data), 
+                            sep=',',
+                            encoding='utf-8',
+                            quotechar='"',
+                            escapechar='\\',
+                            low_memory=False
+                        ),
+                        # Еще одна попытка с другой кодировкой и разделителем
+                        lambda: pd.read_csv(
+                            io.BytesIO(file_data), 
+                            sep=';',
+                            encoding='latin1',
+                            quotechar='"',
+                            escapechar='\\',
+                            low_memory=False
                         )
-                        logger.info(f"Колонки в CSV: {data.columns.tolist()}")
-                    except Exception as e:
-                        logger.error(f"Ошибка чтения CSV: {str(e)}")
+                    ]
+                    
+                    data = None
+                    last_error = None
+                    
+                    for i, read_method in enumerate(read_methods):
+                        try:
+                            logger.info(f"Попытка чтения CSV методом #{i+1}")
+                            data = read_method()
+                            
+                            # Проверяем, успешно ли прочитаны данные
+                            if len(data.columns) <= 1:
+                                logger.warning(f"Метод #{i+1}: найдена только одна колонка, возможно, неверный разделитель")
+                                continue
+                                
+                            logger.info(f"Успешное чтение CSV методом #{i+1}, обнаружено колонок: {len(data.columns)}")
+                            logger.info(f"Колонки: {data.columns.tolist()}")
+                            break
+                        except Exception as e:
+                            last_error = str(e)
+                            logger.warning(f"Метод #{i+1} не сработал: {last_error}")
+                    
+                    if data is None:
                         self.send_json_response(400, {
                             "status": "error", 
-                            "message": f"Ошибка чтения CSV: {str(e)}"
+                            "message": f"Не удалось прочитать CSV файл: {last_error}. Проверьте формат и кодировку файла."
                         })
+                        os.remove(temp_file_path)
                         return
                     
                     # Предварительная обработка названий столбцов
