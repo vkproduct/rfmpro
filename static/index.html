@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFM Pro - Анализ клиентов</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>RFM Pro - Профессиональный анализ клиентов</h1>
+        
+        <div class="card" id="auth-card">
+            <h2>Вход в систему</h2>
+            <form id="login-form">
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Пароль" required>
+                <button type="submit">Войти</button>
+            </form>
+            <p>Нет аккаунта? <a href="#" id="show-register">Зарегистрироваться</a></p>
+        </div>
+        
+        <div class="card" id="register-card" style="display: none;">
+            <h2>Регистрация</h2>
+            <form id="register-form">
+                <input type="email" id="register-email" placeholder="Email" required>
+                <input type="password" id="register-password" placeholder="Пароль" required>
+                <button type="submit">Зарегистрироваться</button>
+            </form>
+            <p>Уже есть аккаунт? <a href="#" id="show-login">Войти</a></p>
+        </div>
+        
+        <div class="card" id="upload-card" style="display: none;">
+            <h2>Загрузка данных для RFM-анализа</h2>
+            <form id="upload-form">
+                <div>
+                    <label for="customer-col">Столбец с ID клиента:</label>
+                    <input type="text" id="customer-col" required>
+                </div>
+                <div>
+                    <label for="date-col">Столбец с датой транзакции:</label>
+                    <input type="text" id="date-col" required>
+                </div>
+                <div>
+                    <label for="amount-col">Столбец с суммой транзакции:</label>
+                    <input type="text" id="amount-col" required>
+                </div>
+                <div>
+                    <label for="file-input">CSV файл с данными:</label>
+                    <input type="file" id="file-input" accept=".csv" required>
+                </div>
+                <button type="submit">Выполнить анализ</button>
+            </form>
+        </div>
+        
+        <div class="card" id="results-card" style="display: none;">
+            <h2>Результаты RFM-анализа</h2>
+            <div id="results-container">
+                <div id="rfm-stats">
+                    <p>Всего клиентов: <span id="total-customers">0</span></p>
+                    <p>Общая выручка: <span id="total-revenue">0</span> руб.</p>
+                </div>
+                <h3>Сегменты клиентов:</h3>
+                <div id="segments-container"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Переключение между формами входа и регистрации
+        document.getElementById('show-register').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('auth-card').style.display = 'none';
+            document.getElementById('register-card').style.display = 'block';
+        });
+        
+        document.getElementById('show-login').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('register-card').style.display = 'none';
+            document.getElementById('auth-card').style.display = 'block';
+        });
+        
+        // Обработка формы регистрации
+        document.getElementById('register-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            
+            fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Регистрация успешна! Теперь вы можете войти.');
+                    document.getElementById('register-card').style.display = 'none';
+                    document.getElementById('auth-card').style.display = 'block';
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error);
+            });
+        });
+        
+        // Обработка формы входа
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+            })
+            .then(response => {
+                if (response.ok) {
+                    const token = response.headers.get('X-Auth-Token');
+                    localStorage.setItem('auth_token', token);
+                    return response.json();
+                } else {
+                    throw new Error('Ошибка авторизации');
+                }
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('auth-card').style.display = 'none';
+                    document.getElementById('upload-card').style.display = 'block';
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error);
+            });
+        });
+        
+        // Обработка формы загрузки файла
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const customerCol = document.getElementById('customer-col').value;
+            const dateCol = document.getElementById('date-col').value;
+            const amountCol = document.getElementById('amount-col').value;
+            const fileInput = document.getElementById('file-input');
+            const token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                alert('Необходимо войти в систему');
+                document.getElementById('upload-card').style.display = 'none';
+                document.getElementById('auth-card').style.display = 'block';
+                return;
+            }
+            
+            if (!fileInput.files.length) {
+                alert('Выберите файл CSV');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('customer_col', customerCol);
+            formData.append('date_col', dateCol);
+            formData.append('amount_col', amountCol);
+            
+            fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': token
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.total_customers) {
+                    // Отображаем результаты
+                    document.getElementById('total-customers').textContent = data.total_customers;
+                    document.getElementById('total-revenue').textContent = data.total_revenue.toLocaleString();
+                    
+                    // Отображаем сегменты
+                    const segmentsContainer = document.getElementById('segments-container');
+                    segmentsContainer.innerHTML = '';
+                    
+                    for (const segment in data.segments) {
+                        const segmentDiv = document.createElement('div');
+                        segmentDiv.className = 'segment';
+                        segmentDiv.innerHTML = `<strong>${segment}:</strong> ${data.segments[segment]} клиентов`;
+                        segmentsContainer.appendChild(segmentDiv);
+                    }
+                    
+                    document.getElementById('upload-card').style.display = 'none';
+                    document.getElementById('results-card').style.display = 'block';
+                } else {
+                    alert('Ошибка: ' + (data.message || 'Неизвестная ошибка при анализе данных'));
+                }
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error);
+            });
+        });
+    </script>
+</body>
+</html>

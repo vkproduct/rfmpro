@@ -7,30 +7,43 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth, firestore, storage
 from datetime import datetime
+from urllib.parse import unquote  # Добавляем для декодирования URL
 
 PORT = 8000
 
 # Инициализация Firebase
 cred = credentials.Certificate("firebase_config.json")
-firebase_admin.initialize_app(cred, {"storageBucket": "rfmpro-ed06f.appspot.com"})  # Твой storageBucket
+firebase_admin.initialize_app(cred, {"storageBucket": "rfmpro-ed06f.appspot.com"})
 db = firestore.client()
 bucket = storage.bucket()
 
 class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            with open("static/index.html", "rb") as f:
-                self.wfile.write(f.read())
+            print("GET / requested")
+            try:
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                with open("static/index.html", "rb") as f:
+                    content = f.read()
+                    print(f"Sending index.html, size: {len(content)} bytes")
+                    self.wfile.write(content)
+            except FileNotFoundError:
+                print("index.html not found")
+                self.send_response(404)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"404 - File not found")
         elif self.path == '/style.css':
+            print("GET /style.css requested")
             self.send_response(200)
             self.send_header("Content-type", "text/css")
             self.end_headers()
             with open("static/style.css", "rb") as f:
                 self.wfile.write(f.read())
         else:
+            print(f"GET {self.path} not found")
             self.send_response(404)
             self.end_headers()
 
@@ -41,9 +54,11 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
 
             if self.path == '/register':
+                # Декодируем данные формы и обрабатываем URL-кодировку
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
-                email = data.get('email')
-                password = data.get('password')
+                email = unquote(data.get('email'))  # Декодируем email (например, %40 → @)
+                password = unquote(data.get('password'))  # Декодируем пароль
+                print(f"Registering user: {email}")
                 user = auth.create_user(email=email, password=password)
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -52,8 +67,9 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             elif self.path == '/login':
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
-                email = data.get('email')
-                password = data.get('password')
+                email = unquote(data.get('email'))
+                password = unquote(data.get('password'))
+                print(f"Logging in user: {email}")
                 user = auth.get_user_by_email(email)
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -142,7 +158,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def check_auth(self, auth_header):
         try:
-            user = auth.get_user(auth_header)  # Проверяем UID как токен
+            user = auth.get_user(auth_header)
             return True
         except:
             return False
