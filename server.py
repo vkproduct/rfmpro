@@ -44,6 +44,8 @@ PORT = 8000
 
 class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        print(f"Запрос: GET {self.path}")
+        
         if self.path == '/':
             print("GET / requested")
             try:
@@ -60,6 +62,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-type", "text/plain")
                 self.end_headers()
                 self.wfile.write(b"404 - File not found")
+        
         elif self.path == '/style.css':
             print("GET /style.css requested")
             self.send_response(200)
@@ -67,10 +70,187 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             with open("static/style.css", "rb") as f:
                 self.wfile.write(f.read())
+        
+        elif self.path == '/dashboard':
+            print("GET /dashboard requested")
+            try:
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                with open("static/dashboard/index.html", "rb") as f:
+                    content = f.read()
+                    print(f"Отправка dashboard/index.html, размер: {len(content)} байт")
+                    self.wfile.write(content)
+            except FileNotFoundError as e:
+                print(f"dashboard/index.html не найден: {str(e)}")
+                # Попробуем создать папку и файл автоматически
+                try:
+                    os.makedirs("static/dashboard", exist_ok=True)
+                    self.send_response(404)
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"404 - Dashboard files missing. Directory created, please add necessary files.")
+                except Exception as dir_error:
+                    print(f"Ошибка создания директории: {str(dir_error)}")
+                    self.send_response(500)
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(f"500 - Server error: {str(dir_error)}".encode())
+            except Exception as e:
+                print(f"Ошибка при обработке /dashboard: {str(e)}")
+                self.send_response(500)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(f"500 - Server error: {str(e)}".encode())
+        
+        elif self.path.startswith('/dashboard/'):
+            # Обработка файлов дашборда
+            file_path = os.path.join("static", self.path[1:])
+            print(f"Запрос файла дашборда: {file_path}")
+            
+            try:
+                with open(file_path, "rb") as f:
+                    content = f.read()
+                    self.send_response(200)
+                    
+                    # Установка правильного типа содержимого
+                    if file_path.endswith('.jsx'):
+                        self.send_header("Content-type", "text/babel")
+                    elif file_path.endswith('.js'):
+                        self.send_header("Content-type", "application/javascript")
+                    elif file_path.endswith('.css'):
+                        self.send_header("Content-type", "text/css")
+                    elif file_path.endswith('.json'):
+                        self.send_header("Content-type", "application/json")
+                    elif file_path.endswith('.html'):
+                        self.send_header("Content-type", "text/html")
+                    else:
+                        self.send_header("Content-type", "text/plain")
+                    
+                    self.end_headers()
+                    self.wfile.write(content)
+                    print(f"Файл {file_path} успешно отправлен ({len(content)} байт)")
+            
+            except FileNotFoundError:
+                print(f"Файл не найден: {file_path}")
+                self.send_response(404)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(f"404 - File not found: {file_path}".encode())
+            
+            except Exception as e:
+                print(f"Ошибка при обработке {file_path}: {str(e)}")
+                self.send_response(500)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(f"500 - Server error: {str(e)}".encode())
+        
+        elif self.path == '/api/rfm-data':
+            # API для получения данных RFM-анализа
+            print("Запрос API: /api/rfm-data")
+            self.handle_rfm_data_api()
+        
+        elif self.path == '/api/upload-history':
+            # API для получения истории загрузок
+            print("Запрос API: /api/upload-history")
+            self.handle_upload_history_api()
+        
         else:
             print(f"GET {self.path} not found")
             self.send_response(404)
+            self.send_header("Content-type", "text/plain")
             self.end_headers()
+            self.wfile.write(b"404 - Not Found")
+
+    def handle_rfm_data_api(self):
+        """Обработчик API для получения данных RFM-анализа"""
+        # Получаем последний файл результатов
+        results_dir = "results"
+        if os.path.exists(results_dir):
+            files = sorted(
+                [f for f in os.listdir(results_dir) if f.startswith('rfm_results_')],
+                key=lambda x: os.path.getmtime(os.path.join(results_dir, x)),
+                reverse=True
+            )
+            
+            if files:
+                latest_file = os.path.join(results_dir, files[0])
+                try:
+                    # Читаем CSV файл
+                    rfm_df = pd.read_csv(latest_file)
+                    
+                    # Преобразуем в формат JSON
+                    rfm_data = {
+                        "customers": rfm_df.to_dict(orient='records'),
+                        "summary": {
+                            "total_customers": int(rfm_df[rfm_df.columns[0]].nunique()),
+                            "total_revenue": float(rfm_df['Monetary'].sum()),
+                            "avg_recency": float(rfm_df['Recency'].mean()),
+                            "avg_frequency": float(rfm_df['Frequency'].mean()),
+                            "avg_monetary": float(rfm_df['Monetary_Mean'].mean())
+                        },
+                        "segments": rfm_df.groupby('Customer_Segment').size().to_dict(),
+                        "rfm_scores": rfm_df.groupby('RFM_Score').size().to_dict()
+                    }
+                    
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(rfm_data).encode())
+                    return
+                except Exception as e:
+                    print(f"Error processing RFM data: {str(e)}")
+                    traceback.print_exc()
+        
+        self.send_response(404)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": "No RFM data found"}).encode())
+
+    def handle_upload_history_api(self):
+        """Обработчик API для получения истории загрузок"""
+        results_dir = "results"
+        if os.path.exists(results_dir):
+            try:
+                # Получаем список файлов с результатами
+                files = [f for f in os.listdir(results_dir) if f.startswith('rfm_results_')]
+                upload_history = []
+                
+                for i, filename in enumerate(files):
+                    timestamp = filename.split('_')[-1].split('.')[0]
+                    date_str = datetime.fromtimestamp(int(timestamp)).strftime('%d.%m.%Y')
+                    
+                    # Читаем краткую информацию из файла
+                    file_path = os.path.join(results_dir, filename)
+                    try:
+                        rfm_df = pd.read_csv(file_path)
+                        segment_count = rfm_df['Customer_Segment'].nunique()
+                        record_count = len(rfm_df)
+                        
+                        upload_history.append({
+                            "id": i + 1,
+                            "filename": filename,
+                            "date": date_str,
+                            "records": record_count,
+                            "segments": segment_count
+                        })
+                    except Exception as e:
+                        print(f"Ошибка при чтении файла {filename}: {str(e)}")
+                
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(upload_history).encode())
+                return
+            except Exception as e:
+                print(f"Ошибка при получении истории загрузок: {str(e)}")
+                traceback.print_exc()
+        
+        # В случае ошибки или отсутствия файлов возвращаем пустой список
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps([]).encode())
 
     def do_POST(self):
         try:
@@ -269,11 +449,21 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     else:
                         print("Firebase не инициализирован, результаты не сохранены в облаке")
                     
-                    # Сохраняем локально в CSV-файл
+                    # Создаем директорию results, если её нет
                     results_dir = "results"
                     if not os.path.exists(results_dir):
                         os.makedirs(results_dir)
-                    rfm_df.to_csv(f"{results_dir}/rfm_results_{int(datetime.now().timestamp())}.csv", index=False)
+                    
+                    # Сохраняем локально в CSV-файл
+                    result_file = f"{results_dir}/rfm_results_{int(datetime.now().timestamp())}.csv"
+                    rfm_df.to_csv(result_file, index=False)
+                    print(f"Результаты сохранены в {result_file}")
+                    
+                    # Обновляем исходную страницу index.html, чтобы добавить ссылку на дашборд
+                    try:
+                        self.ensure_dashboard_link_in_index()
+                    except Exception as e:
+                        print(f"Не удалось добавить ссылку на дашборд: {str(e)}")
 
                     self.send_response(200)
                     self.send_header("Content-type", "application/json")
@@ -295,6 +485,34 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
 
+    def ensure_dashboard_link_in_index(self):
+        """Убеждаемся, что в index.html есть ссылка на дашборд"""
+        index_path = "static/index.html"
+        
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # Проверяем, есть ли ссылка на дашборд
+            if '<a href="/dashboard"' not in content and 'id="results-card"' in content:
+                # Добавляем ссылку на дашборд
+                dashboard_link = '\n<div class="text-center mt-4">\n<a href="/dashboard" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Открыть расширенный дашборд</a>\n</div>\n'
+                
+                # Находим место для вставки ссылки
+                results_end_pos = content.find('</div>', content.find('id="results-card"'))
+                if results_end_pos != -1:
+                    new_content = content[:results_end_pos] + dashboard_link + content[results_end_pos:]
+                    
+                    # Сохраняем обновленный файл
+                    with open(index_path, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                        
+                    print("Ссылка на дашборд добавлена в index.html")
+        except Exception as e:
+            print(f"Ошибка при обновлении index.html: {str(e)}")
+            # Не останавливаем основной процесс из-за ошибки
+            pass
+
     def check_auth(self, auth_header):
         if not firebase_admin_imported:
             return True  # В режиме без Firebase авторизация всегда успешна
@@ -305,7 +523,21 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         except:
             return False
 
+# Создаем и запускаем сервер
 Handler = SimpleHTTPRequestHandler
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    print(f"Сервер запущен на http://localhost:{PORT}")
+
+# Проверяем наличие директории dashboard и создаем её при необходимости
+try:
+    os.makedirs("static/dashboard", exist_ok=True)
+    print("Директория 'static/dashboard' проверена/создана")
+except Exception as e:
+    print(f"Ошибка при создании директории static/dashboard: {str(e)}")
+
+try:
+    print(f"Запуск сервера на http://localhost:{PORT}")
+    httpd = socketserver.TCPServer(("", PORT), Handler)
     httpd.serve_forever()
+except KeyboardInterrupt:
+    print("Сервер остановлен пользователем")
+except Exception as e:
+    print(f"Ошибка при запуске сервера: {str(e)}")

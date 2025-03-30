@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFM Pro - Дашборд аналитики</title>
+    
+    <!-- Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    
+    <style>
+        /* Базовые стили для отладки */
+        body {
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
+        #error-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <!-- Сообщение при загрузке -->
+        <div class="flex items-center justify-center min-h-screen">
+            <div id="error-container" class="text-center">
+                <div class="loading-spinner"></div>
+                <h3 class="text-lg font-bold mb-2">Загрузка дашборда...</h3>
+                <p>Если дашборд не загружается в течение длительного времени, возможно, возникла проблема со скриптами.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Базовый React-дашборд без внешних зависимостей -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Функция для создания базовой версии дашборда без React
+            function createBasicDashboard() {
+                const root = document.getElementById('root');
+                
+                root.innerHTML = `
+                    <div class="bg-gray-50 min-h-screen">
+                        <!-- Верхняя панель -->
+                        <div class="bg-white shadow">
+                            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                                <h1 class="text-xl font-bold">RFM Pro - Личный кабинет</h1>
+                                <div class="flex items-center space-x-4">
+                                    <button class="p-2 rounded-full hover:bg-gray-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/>
+                                        </svg>
+                                    </button>
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                <circle cx="12" cy="7" r="4"></circle>
+                                            </svg>
+                                        </div>
+                                        <span class="ml-2">Пользователь</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Основной контент -->
+                        <div class="container mx-auto px-4 py-6">
+                            <div class="bg-white rounded-lg shadow p-6 max-w-2xl mx-auto">
+                                <h2 class="text-xl font-bold mb-4 text-blue-500">Дашборд RFM-анализа</h2>
+                                <p class="mb-4">Полная версия дашборда с React и интерактивными графиками сейчас недоступна.</p>
+                                <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                                    <h3 class="font-bold mb-2">Возможные причины проблемы:</h3>
+                                    <ul class="list-disc pl-5 space-y-1">
+                                        <li>Ошибки в загрузке библиотек React, Recharts или Lucide</li>
+                                        <li>Проблемы с транспиляцией JSX через Babel</li>
+                                        <li>Ошибки в коде компонента RFMDashboard.jsx</li>
+                                    </ul>
+                                </div>
+                                <div class="flex justify-center mt-4">
+                                    <a href="/" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                                        Вернуться на главную
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Попытка загрузить упрощенную версию дашборда, если основная не загружается
+            setTimeout(function() {
+                if (document.getElementById('error-container')) {
+                    createBasicDashboard();
+                    console.log('Загружена упрощенная версия дашборда из-за таймаута');
+                }
+            }, 3000);
+        });
+    </script>
+    
+    <!-- Попытка загрузить полноценный дашборд -->
+    <script>
+        // Функция для загрузки скрипта с обработкой ошибок
+        function loadScript(src, callback) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = callback;
+            script.onerror = function() {
+                console.error('Ошибка загрузки скрипта: ' + src);
+                document.getElementById('error-container').innerHTML += 
+                    `<div class="text-red-500 mt-2">Ошибка загрузки: ${src}</div>`;
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Последовательная загрузка необходимых библиотек
+        loadScript('https://unpkg.com/react@17/umd/react.production.min.js', function() {
+            loadScript('https://unpkg.com/react-dom@17/umd/react-dom.production.min.js', function() {
+                loadScript('https://unpkg.com/babel-standalone@6/babel.min.js', function() {
+                    loadScript('https://unpkg.com/recharts/umd/Recharts.min.js', function() {
+                        loadScript('https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.min.js', function() {
+                            // Все зависимости загружены, теперь загружаем дашборд
+                            const script = document.createElement('script');
+                            script.type = 'text/babel';
+                            script.src = '/dashboard/RFMDashboard.jsx';
+                            script.onerror = function() {
+                                console.error('Не удалось загрузить RFMDashboard.jsx');
+                                document.getElementById('error-container').innerHTML += 
+                                    '<div class="text-red-500 mt-2">Ошибка загрузки RFMDashboard.jsx</div>';
+                            };
+                            document.body.appendChild(script);
+
+                            // Инициализируем React-приложение
+                            const initScript = document.createElement('script');
+                            initScript.type = 'text/babel';
+                            initScript.textContent = `
+                                // Инициализация React-приложения
+                                try {
+                                    ReactDOM.render(
+                                        <RFMDashboard />,
+                                        document.getElementById('root')
+                                    );
+                                    console.log('Дашборд успешно загружен');
+                                } catch(e) {
+                                    console.error('Ошибка при рендеринге дашборда:', e);
+                                    document.getElementById('error-container').innerHTML += 
+                                        '<div class="text-red-500 mt-2">Ошибка при рендеринге: ' + e.message + '</div>';
+                                }
+                            `;
+                            document.body.appendChild(initScript);
+                        });
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>
