@@ -7,7 +7,7 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth, firestore, storage
 from datetime import datetime
-from urllib.parse import unquote  # Добавляем для декодирования URL
+from urllib.parse import unquote
 
 PORT = 8000
 
@@ -54,10 +54,9 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
 
             if self.path == '/register':
-                # Декодируем данные формы и обрабатываем URL-кодировку
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
-                email = unquote(data.get('email'))  # Декодируем email (например, %40 → @)
-                password = unquote(data.get('password'))  # Декодируем пароль
+                email = unquote(data.get('email'))
+                password = unquote(data.get('password'))
                 print(f"Registering user: {email}")
                 user = auth.create_user(email=email, password=password)
                 self.send_response(200)
@@ -99,10 +98,13 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                             file_data = part[file_start:file_end]
                         elif b'name="customer_col"' in part:
                             customer_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
+                            print(f"Selected customer_col: {customer_col}")
                         elif b'name="date_col"' in part:
                             date_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
+                            print(f"Selected date_col: {date_col}")
                         elif b'name="amount_col"' in part:
                             amount_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
+                            print(f"Selected amount_col: {amount_col}")
 
                 if not file_data or not customer_col or not date_col or not amount_col:
                     self.send_response(400)
@@ -117,10 +119,16 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 print(f"Сохранён файл {file_name} размером {len(file_data)} байт")
                 data = pd.read_csv(file_name)
-                print(f"Колонки в CSV: {data.columns.tolist()}")
+                print(f"Колонки в CSV: {list(data.columns)}")
                 
-                if not {customer_col, date_col, amount_col}.issubset(data.columns):
-                    missing = {customer_col, date_col, amount_col} - set(data.columns)
+                # Добавляем отладку перед проверкой
+                required_cols = {customer_col, date_col, amount_col}
+                actual_cols = set(data.columns)
+                print(f"Требуемые колонки: {required_cols}")
+                print(f"Колонки в данных: {actual_cols}")
+                
+                if not required_cols.issubset(actual_cols):
+                    missing = required_cols - actual_cols
                     self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
