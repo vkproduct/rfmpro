@@ -1,0 +1,30 @@
+# Виртуальное окружение Python
+venv/
+env/
+
+# Скомпилированные файлы Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Локальные файлы конфигурации Firebase
+firebase_config.json
+
+# Временные файлы
+*.csv  # Игнорируем временные CSV, которые создаются при загрузке
+*.log
+*.tmp
+
+# Системные файлы macOS
+.DS_Store
+
+# Зависимости, установленные через pip
+*.egg-info/
+dist/
+build/
+
+# Локальные файлы редакторов
+*.swp
+*.swo
+.vscode/
+.idea/
