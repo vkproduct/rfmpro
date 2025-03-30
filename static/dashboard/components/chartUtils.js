@@ -185,6 +185,13 @@ const ChartUtils = (function() {
      * @param {string} title Заголовок графика
      * @returns {Object} Экземпляр графика
      */
+    /**
+ * Создает кольцевую диаграмму для отображения сегментов
+ * @param {string} containerId ID контейнера для графика
+ * @param {Array} data Массив данных {name, value}
+ * @param {string} title Заголовок графика
+ * @returns {Object} Экземпляр графика
+ */
     function createPieChart(containerId, data, title) {
         const container = document.getElementById(containerId);
         if (!container) {
@@ -195,7 +202,7 @@ const ChartUtils = (function() {
         const options = {
             series: data.map(item => item.value),
             chart: {
-                type: 'pie',
+                type: 'donut',  // Изменили тип на donut
                 height: 300,
                 toolbar: {
                     show: false
@@ -219,14 +226,40 @@ const ChartUtils = (function() {
             plotOptions: {
                 pie: {
                     donut: {
-                        size: '50%'
+                        size: '60%',  // Увеличиваем размер отверстия
+                        labels: {
+                            show: true,
+                            name: {
+                                show: true
+                            },
+                            value: {
+                                show: true,
+                                formatter: function(val) {
+                                    return val;
+                                }
+                            },
+                            total: {
+                                show: true,
+                                label: 'Всего',
+                                formatter: function(w) {
+                                    return w.globals.seriesTotals.reduce((a, b) => a + b, 0);
+                                }
+                            }
+                        }
                     }
                 }
             },
             dataLabels: {
                 enabled: true,
                 formatter: function(val, opts) {
-                    return opts.w.config.labels[opts.seriesIndex] + ': ' + Math.round(val) + '%';
+                    return Math.round(val) + '%';
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val;
+                    }
                 }
             },
             title: {
@@ -236,7 +269,7 @@ const ChartUtils = (function() {
                     color: '#444'
                 }
             },
-            colors: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280']
+            colors: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280', '#059669', '#9333ea']
         };
         
         try {
@@ -245,7 +278,7 @@ const ChartUtils = (function() {
             chart.render();
             return chart;
         } catch (error) {
-            console.error('Ошибка при создании круговой диаграммы:', error);
+            console.error('Ошибка при создании кольцевой диаграммы:', error);
             return null;
         }
     }
