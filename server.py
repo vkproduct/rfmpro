@@ -52,6 +52,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             content_type = self.headers.get('Content-Type', '')
+            print(f"POST {self.path} with content length: {content_length}")
 
             if self.path == '/register':
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
@@ -85,6 +86,7 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps({"status": "error", "message": "Требуется авторизация"}).encode())
                     return
                 
+                print(f"Content-Type: {content_type}")
                 boundary = content_type.split('boundary=')[1].encode()
                 parts = post_data.split(b'--' + boundary)
                 file_data = None
@@ -96,15 +98,16 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                             file_start = part.index(b'\r\n\r\n') + 4
                             file_end = part.rindex(b'\r\n--')
                             file_data = part[file_start:file_end]
+                            print(f"File data extracted, size: {len(file_data)} bytes")
                         elif b'name="customer_col"' in part:
                             customer_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected customer_col: {customer_col}")
+                            print(f"Selected customer_col: '{customer_col}'")
                         elif b'name="date_col"' in part:
                             date_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected date_col: {date_col}")
+                            print(f"Selected date_col: '{date_col}'")
                         elif b'name="amount_col"' in part:
                             amount_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected amount_col: {amount_col}")
+                            print(f"Selected amount_col: '{amount_col}'")
 
                 if not file_data or not customer_col or not date_col or not amount_col:
                     self.send_response(400)
@@ -121,7 +124,6 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 data = pd.read_csv(file_name)
                 print(f"Колонки в CSV: {list(data.columns)}")
                 
-                # Добавляем отладку перед проверкой
                 required_cols = {customer_col, date_col, amount_col}
                 actual_cols = set(data.columns)
                 print(f"Требуемые колонки: {required_cols}")
