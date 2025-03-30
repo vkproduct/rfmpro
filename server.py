@@ -8,6 +8,7 @@ import firebase_admin
 from firebase_admin import credentials, auth, firestore, storage
 from datetime import datetime
 from urllib.parse import unquote
+import traceback
 
 PORT = 8000
 
@@ -52,7 +53,6 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             content_type = self.headers.get('Content-Type', '')
-            print(f"POST {self.path} with content length: {content_length}")
 
             if self.path == '/register':
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
@@ -86,44 +86,84 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps({"status": "error", "message": "Требуется авторизация"}).encode())
                     return
                 
-                print(f"Content-Type: {content_type}")
-                boundary = content_type.split('boundary=')[1].encode()
-                parts = post_data.split(b'--' + boundary)
-                file_data = None
-                customer_col, date_col, amount_col = None, None, None
-                
-                for part in parts:
-                    if b'Content-Disposition: form-data' in part:
-                        if b'name="file"' in part:
-                            file_start = part.index(b'\r\n\r\n') + 4
-                            file_end = part.rindex(b'\r\n--')
-                            file_data = part[file_start:file_end]
-                            print(f"File data extracted, size: {len(file_data)} bytes")
-                        elif b'name="customer_col"' in part:
-                            customer_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected customer_col: '{customer_col}'")
-                        elif b'name="date_col"' in part:
-                            date_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected date_col: '{date_col}'")
-                        elif b'name="amount_col"' in part:
-                            amount_col = part.split(b'\r\n\r\n')[1].split(b'\r\n')[0].decode('utf-8')
-                            print(f"Selected amount_col: '{amount_col}'")
+                # Исправленный парсинг multipart/form-data
+                if 'multipart/form-data' in content_type:
+                    # Извлекаем boundary, обрабатываем кавычки
+                    boundary = content_type.split('boundary=')[1]
+                    if boundary.startswith('"') and boundary.endswith('"'):
+                        boundary = boundary[1:-1]
+                    boundary = boundary.encode()
+                    
+                    # Правильный разбор многокомпонентных данных формы
+                    parts = post_data.split(b'--' + boundary)
+                    file_data = None
+                    customer_col, date_col, amount_col = None, None, None
+                    
+                    for part in parts:
+                        if b'Content-Disposition: form-data' not in part:
+                            continue
+                            
+                        # Извлекаем имя поля формы
+                        header_end = part.find(b'\r\n\r\n')
+                        if header_end == -1:
+                            continue
+                            
+                        headers = part[:header_end].decode('utf-8', errors='ignore')
+                        body = part[header_end + 4:]
+                        
+                        # Удаляем трейлер в конце, если есть
+                        if body.endswith(b'\r\n'):
+                            body = body[:-2]
+                        
+                        if 'name="file"' in headers:
+                            file_data = body
+                        elif 'name="customer_col"' in headers:
+                            customer_col = body.decode('utf-8', errors='ignore').strip()
+                            print(f"Selected customer_col: {customer_col}")
+                        elif 'name="date_col"' in headers:
+                            date_col = body.decode('utf-8', errors='ignore').strip()
+                            print(f"Selected date_col: {date_col}")
+                        elif 'name="amount_col"' in headers:
+                            amount_col = body.decode('utf-8', errors='ignore').strip()
+                            print(f"Selected amount_col: {amount_col}")
+                else:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "Неверный формат данных"}).encode())
+                    return
 
                 if not file_data or not customer_col or not date_col or not amount_col:
                     self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": "Не указаны все данные"}).encode())
+                    self.wfile.write(json.dumps({"status": "error", "message": "Не указаны все необходимые данные"}).encode())
                     return
                 
+                # Сохраняем файл
                 file_name = f"upload_{int(datetime.now().timestamp())}.csv"
                 with open(file_name, "wb") as f:
                     f.write(file_data)
                 
                 print(f"Сохранён файл {file_name} размером {len(file_data)} байт")
-                data = pd.read_csv(file_name)
+                
+                # Пытаемся прочитать файл с разными кодировками
+                try:
+                    data = pd.read_csv(file_name, encoding='utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        data = pd.read_csv(file_name, encoding='latin-1')
+                    except Exception as e:
+                        print(f"Ошибка при чтении CSV: {str(e)}")
+                        self.send_response(400)
+                        self.send_header("Content-type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"status": "error", "message": f"Ошибка при чтении CSV: {str(e)}"}).encode())
+                        return
+                
                 print(f"Колонки в CSV: {list(data.columns)}")
                 
+                # Проверяем наличие необходимых колонок
                 required_cols = {customer_col, date_col, amount_col}
                 actual_cols = set(data.columns)
                 print(f"Требуемые колонки: {required_cols}")
@@ -134,33 +174,45 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": f"Отсутствуют колонки: {missing}"}).encode())
+                    self.wfile.write(json.dumps({"status": "error", "message": f"Отсутствуют колонки: {', '.join(missing)}"}).encode())
                     return
                 
-                rfm_df, additional_info = rfm_analysis(data, date_col, customer_col, amount_col)
-                rfm_result = {
-                    "total_customers": int(rfm_df[customer_col].nunique()),
-                    "total_revenue": float(rfm_df['Monetary'].sum()),
-                    "segments": additional_info['segment_distribution'].set_index('Customer_Segment')['Count'].to_dict()
-                }
+                # Дополнительная диагностика
+                print(f"Первые 5 строк данных:\n{data.head()}")
                 
-                blob = bucket.blob(f"uploads/{file_name}")
-                with open(file_name, "rb") as f:
-                    blob.upload_from_file(f, content_type="text/csv")
-                
-                db.collection("rfm_results").add({
-                    "file_name": file_name,
-                    "result": rfm_result,
-                    "timestamp": firestore.SERVER_TIMESTAMP
-                })
+                try:
+                    rfm_df, additional_info = rfm_analysis(data, date_col, customer_col, amount_col)
+                    rfm_result = {
+                        "total_customers": int(rfm_df[customer_col].nunique()),
+                        "total_revenue": float(rfm_df['Monetary'].sum()),
+                        "segments": additional_info['segment_distribution'].set_index('Customer_Segment')['Count'].to_dict()
+                    }
+                    
+                    blob = bucket.blob(f"uploads/{file_name}")
+                    with open(file_name, "rb") as f:
+                        blob.upload_from_file(f, content_type="text/csv")
+                    
+                    db.collection("rfm_results").add({
+                        "file_name": file_name,
+                        "result": rfm_result,
+                        "timestamp": firestore.SERVER_TIMESTAMP
+                    })
 
-                self.send_response(200)
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps(rfm_result).encode())
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(rfm_result).encode())
+                except Exception as e:
+                    print(f"Ошибка в функции rfm_analysis: {str(e)}")
+                    traceback.print_exc()  # Печатаем полный стек ошибки
+                    self.send_response(500)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
 
         except Exception as e:
-            print(f"Ошибка: {str(e)}")
+            print(f"Общая ошибка: {str(e)}")
+            traceback.print_exc()  # Печатаем полный стек ошибки
             self.send_response(500)
             self.send_header("Content-type", "application/json")
             self.end_headers()
