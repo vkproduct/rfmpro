@@ -4,19 +4,43 @@ import pandas as pd
 from rfmpro_analysis import rfm_analysis
 import os
 import json
-import firebase_admin
-from firebase_admin import credentials, auth, firestore, storage
-from datetime import datetime
-from urllib.parse import unquote
 import traceback
+from urllib.parse import unquote
+from datetime import datetime
+
+# Попытка инициализации Firebase, при условии наличия конфигурационного файла
+firebase_admin_imported = False
+try:
+    import firebase_admin
+    from firebase_admin import credentials, auth, firestore, storage
+    
+    # Проверяем наличие конфигурационного файла
+    if os.path.exists("firebase_config.json"):
+        cred = credentials.Certificate("firebase_config.json")
+        try:
+            # Пытаемся инициализировать Firebase с указанным bucket
+            firebase_admin.initialize_app(cred, {"storageBucket": "rfmpro-ed06f.appspot.com"})
+            db = firestore.client()
+            bucket = storage.bucket()
+            firebase_admin_imported = True
+            print("Firebase успешно инициализирован")
+        except Exception as e:
+            print(f"Ошибка при инициализации Firebase: {str(e)}")
+            # Попытка инициализации без указания конкретного bucket
+            try:
+                firebase_admin.initialize_app(cred)
+                db = firestore.client()
+                # Не используем storage в этом случае
+                firebase_admin_imported = True
+                print("Firebase инициализирован без доступа к Storage")
+            except Exception as e:
+                print(f"Невозможно инициализировать Firebase: {str(e)}")
+    else:
+        print("Файл конфигурации Firebase не найден: firebase_config.json")
+except ImportError:
+    print("Модуль firebase_admin не установлен, функциональность Firebase будет отключена")
 
 PORT = 8000
-
-# Инициализация Firebase
-cred = credentials.Certificate("firebase_config.json")
-firebase_admin.initialize_app(cred, {"storageBucket": "rfmpro-ed06f.appspot.com"})
-db = firestore.client()
-bucket = storage.bucket()
 
 class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -55,31 +79,61 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
 
             if self.path == '/register':
+                if not firebase_admin_imported:
+                    self.send_response(500)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "Firebase не настроен"}).encode())
+                    return
+                    
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = unquote(data.get('email'))
                 password = unquote(data.get('password'))
                 print(f"Registering user: {email}")
-                user = auth.create_user(email=email, password=password)
-                self.send_response(200)
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
+                
+                try:
+                    user = auth.create_user(email=email, password=password)
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": f"Ошибка регистрации: {str(e)}"}).encode())
 
             elif self.path == '/login':
+                if not firebase_admin_imported:
+                    # Упрощенная авторизация для случая, когда Firebase не настроен
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.send_header("X-Auth-Token", "demo-token")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "message": "Демо-режим: вход без Firebase"}).encode())
+                    return
+                    
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = unquote(data.get('email'))
                 password = unquote(data.get('password'))
                 print(f"Logging in user: {email}")
-                user = auth.get_user_by_email(email)
-                self.send_response(200)
-                self.send_header("Content-type", "application/json")
-                self.send_header("X-Auth-Token", user.uid)
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "success", "message": "Вход успешен"}).encode())
+                
+                try:
+                    user = auth.get_user_by_email(email)
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.send_header("X-Auth-Token", user.uid)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "message": "Вход успешен"}).encode())
+                except Exception as e:
+                    self.send_response(401)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": f"Ошибка входа: {str(e)}"}).encode())
 
             elif self.path == '/upload':
                 auth_token = self.headers.get('Authorization', '')
-                if not auth_token or not self.check_auth(auth_token):
+                if firebase_admin_imported and not self.check_auth(auth_token):
                     self.send_response(401)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
@@ -188,15 +242,38 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         "segments": additional_info['segment_distribution'].set_index('Customer_Segment')['Count'].to_dict()
                     }
                     
-                    blob = bucket.blob(f"uploads/{file_name}")
-                    with open(file_name, "rb") as f:
-                        blob.upload_from_file(f, content_type="text/csv")
+                    # Сохранение результатов в Firebase только если Firebase настроен
+                    if firebase_admin_imported:
+                        try:
+                            # Пробуем сохранить в Firebase Storage
+                            try:
+                                blob = bucket.blob(f"uploads/{file_name}")
+                                with open(file_name, "rb") as f:
+                                    blob.upload_from_file(f, content_type="text/csv")
+                                print(f"Файл успешно загружен в Firebase Storage")
+                            except Exception as storage_error:
+                                print(f"Ошибка при загрузке в Firebase Storage: {str(storage_error)}")
+                            
+                            # Пробуем сохранить в Firestore
+                            try:
+                                db.collection("rfm_results").add({
+                                    "file_name": file_name,
+                                    "result": rfm_result,
+                                    "timestamp": firestore.SERVER_TIMESTAMP
+                                })
+                                print(f"Результаты успешно сохранены в Firestore")
+                            except Exception as firestore_error:
+                                print(f"Ошибка при сохранении в Firestore: {str(firestore_error)}")
+                        except Exception as firebase_error:
+                            print(f"Общая ошибка при работе с Firebase: {str(firebase_error)}")
+                    else:
+                        print("Firebase не инициализирован, результаты не сохранены в облаке")
                     
-                    db.collection("rfm_results").add({
-                        "file_name": file_name,
-                        "result": rfm_result,
-                        "timestamp": firestore.SERVER_TIMESTAMP
-                    })
+                    # Сохраняем локально в CSV-файл
+                    results_dir = "results"
+                    if not os.path.exists(results_dir):
+                        os.makedirs(results_dir)
+                    rfm_df.to_csv(f"{results_dir}/rfm_results_{int(datetime.now().timestamp())}.csv", index=False)
 
                     self.send_response(200)
                     self.send_header("Content-type", "application/json")
@@ -219,6 +296,9 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
 
     def check_auth(self, auth_header):
+        if not firebase_admin_imported:
+            return True  # В режиме без Firebase авторизация всегда успешна
+            
         try:
             user = auth.get_user(auth_header)
             return True
