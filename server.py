@@ -1,14 +1,20 @@
 import http.server
 import socketserver
 import pandas as pd
-from rfmpro_analysis import rfmpro_analysis
+from rfmpro_analysis import rfm_analysis
 import os
 import json
-import requests
+import firebase_admin
+from firebase_admin import credentials, auth, firestore, storage
 from datetime import datetime
 
 PORT = 8000
-POCKETBASE_URL = "http://127.0.0.1:8090/api"
+
+# Инициализация Firebase
+cred = credentials.Certificate("firebase_config.json")
+firebase_admin.initialize_app(cred, {"storageBucket": "rfmpro-ed06f.appspot.com"})  # Твой storageBucket
+db = firestore.client()
+bucket = storage.bucket()
 
 class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -38,45 +44,26 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = data.get('email')
                 password = data.get('password')
-                response = requests.post(
-                    f"{POCKETBASE_URL}/collections/users/records",
-                    json={"email": email, "password": password, "passwordConfirm": password}
-                )
-                if response.status_code == 201:
-                    self.send_response(200)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
-                else:
-                    self.send_response(400)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": response.text}).encode())
+                user = auth.create_user(email=email, password=password)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success", "message": "Регистрация прошла успешно"}).encode())
 
             elif self.path == '/login':
                 data = dict(x.split('=') for x in post_data.decode('utf-8').split('&'))
                 email = data.get('email')
                 password = data.get('password')
-                response = requests.post(
-                    f"{POCKETBASE_URL}/collections/users/auth-with-password",
-                    json={"identity": email, "password": password}
-                )
-                if response.status_code == 200:
-                    auth_token = response.json()['token']
-                    self.send_response(200)
-                    self.send_header("Content-type", "application/json")
-                    self.send_header("X-Auth-Token", auth_token)
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "success", "message": "Вход успешен"}).encode())
-                else:
-                    self.send_response(401)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": "Неверные данные"}).encode())
+                user = auth.get_user_by_email(email)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.send_header("X-Auth-Token", user.uid)
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success", "message": "Вход успешен"}).encode())
 
             elif self.path == '/upload':
-                auth = self.headers.get('Authorization', '')
-                if not auth:
+                auth_token = self.headers.get('Authorization', '')
+                if not auth_token or not self.check_auth(auth_token):
                     self.send_response(401)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
@@ -124,30 +111,22 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps({"status": "error", "message": f"Отсутствуют колонки: {missing}"}).encode())
                     return
                 
-                rfm_df, additional_info = rfmpro_analysis(data, date_col, customer_col, amount_col)
+                rfm_df, additional_info = rfm_analysis(data, date_col, customer_col, amount_col)
                 rfm_result = {
                     "total_customers": int(rfm_df[customer_col].nunique()),
                     "total_revenue": float(rfm_df['Monetary'].sum()),
                     "segments": additional_info['segment_distribution'].set_index('Customer_Segment')['Count'].to_dict()
                 }
                 
-                with open(file_name, 'rb') as f:
-                    files = {'file': (file_name, f, 'text/csv')}
-                    upload_response = requests.post(
-                        f"{POCKETBASE_URL}/collections/uploads/records",
-                        headers={"Authorization": auth},
-                        files=files
-                    )
-                if upload_response.status_code != 201:
-                    raise Exception("Ошибка загрузки файла: " + upload_response.text)
-
-                result_response = requests.post(
-                    f"{POCKETBASE_URL}/collections/rfm_results/records",
-                    headers={"Authorization": auth},
-                    json={"file_name": file_name, "result": rfm_result}
-                )
-                if result_response.status_code != 201:
-                    raise Exception("Ошибка сохранения результата: " + result_response.text)
+                blob = bucket.blob(f"uploads/{file_name}")
+                with open(file_name, "rb") as f:
+                    blob.upload_from_file(f, content_type="text/csv")
+                
+                db.collection("rfm_results").add({
+                    "file_name": file_name,
+                    "result": rfm_result,
+                    "timestamp": firestore.SERVER_TIMESTAMP
+                })
 
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -159,14 +138,14 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(500)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode()))
+            self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
 
     def check_auth(self, auth_header):
-        response = requests.get(
-            f"{POCKETBASE_URL}/collections/users/auth-refresh",
-            headers={"Authorization": auth_header}
-        )
-        return response.status_code == 200
+        try:
+            user = auth.get_user(auth_header)  # Проверяем UID как токен
+            return True
+        except:
+            return False
 
 Handler = SimpleHTTPRequestHandler
 with socketserver.TCPServer(("", PORT), Handler) as httpd:
