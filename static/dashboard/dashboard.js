@@ -86,7 +86,11 @@ const DashboardApp = (function() {
         // Инициализируем графики, если необходимо
         if (activeTab === 'overview' || activeTab === 'segments') {
             try {
-                ChartUtils.initializeCharts(activeTab);
+                // Добавьте здесь console.log для диагностики
+                console.log('Инициализация графиков для вкладки:', activeTab);
+                setTimeout(() => {
+                    ChartUtils.initializeCharts(activeTab);
+                }, 100); // Добавляем небольшую задержку для инициализации DOM
             } catch (error) {
                 console.error('Ошибка при инициализации графиков:', error);
             }

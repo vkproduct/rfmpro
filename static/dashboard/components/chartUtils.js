@@ -98,73 +98,78 @@ const ChartUtils = (function() {
     }
     
     /**
-     * Создает линейную диаграмму для отображения RFM-оценок
+     * Создает столбчатую диаграмму для отображения дохода по сегментам
      * @param {string} containerId ID контейнера для графика
-     * @param {Array} data Массив данных {name, value}
+     * @param {Array} data Массив данных {name, revenue}
      * @param {string} title Заголовок графика
      * @returns {Object} Экземпляр графика
      */
-    function createLineChart(containerId, data, title) {
+    function createSegmentRevenueChart(containerId, data, title) {
         const container = document.getElementById(containerId);
         if (!container) {
             console.error(`Контейнер ${containerId} не найден`);
             return null;
         }
         
-        // Сортируем данные по значению name
-        const sortedData = [...data].sort((a, b) => parseInt(a.name) - parseInt(b.name));
-        
         const options = {
             series: [{
-                name: 'Количество',
-                data: sortedData.map(item => item.value)
+                name: 'Доход',
+                data: data.map(item => item.revenue)
             }],
             chart: {
-                type: 'line',
+                type: 'bar',
                 height: 300,
                 toolbar: {
                     show: false
-                },
-                zoom: {
-                    enabled: false
+                }
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 4,
+                    horizontal: false,
+                    columnWidth: '60%',
+                    distributed: true
                 }
             },
             dataLabels: {
-                enabled: true
+                enabled: false
             },
-            stroke: {
-                curve: 'straight',
-                width: 3
-            },
-            markers: {
-                size: 5
-            },
+            colors: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280', '#059669', '#9333ea'],
             xaxis: {
-                categories: sortedData.map(item => item.name),
-                title: {
-                    text: 'RFM-Score'
+                categories: data.map(item => item.name),
+                labels: {
+                    style: {
+                        fontSize: '12px'
+                    }
                 }
             },
             yaxis: {
                 title: {
-                    text: 'Количество клиентов'
+                    text: 'Доход (₽)',
+                    style: {
+                        fontSize: '14px'
+                    }
+                },
+                labels: {
+                    formatter: function(val) {
+                        return val.toLocaleString() + ' ₽';
+                    }
                 }
             },
-            grid: {
-                borderColor: '#e7e7e7',
-                row: {
-                    colors: ['#f3f3f3', 'transparent'],
-                    opacity: 0.5
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val.toLocaleString() + ' ₽';
+                    }
                 }
             },
             title: {
-                text: title || 'Распределение по RFM-оценке',
+                text: title || 'Доход по каждому сегменту',
                 align: 'center',
                 style: {
                     color: '#444'
                 }
-            },
-            colors: ['#3b82f6']
+            }
         };
         
         try {
@@ -173,25 +178,18 @@ const ChartUtils = (function() {
             chart.render();
             return chart;
         } catch (error) {
-            console.error('Ошибка при создании линейной диаграммы:', error);
+            console.error('Ошибка при создании графика дохода по сегментам:', error);
             return null;
         }
     }
     
     /**
-     * Создает круговую диаграмму для отображения сегментов
+     * Создает кольцевую диаграмму для отображения сегментов
      * @param {string} containerId ID контейнера для графика
      * @param {Array} data Массив данных {name, value}
      * @param {string} title Заголовок графика
      * @returns {Object} Экземпляр графика
      */
-    /**
- * Создает кольцевую диаграмму для отображения сегментов
- * @param {string} containerId ID контейнера для графика
- * @param {Array} data Массив данных {name, value}
- * @param {string} title Заголовок графика
- * @returns {Object} Экземпляр графика
- */
     function createPieChart(containerId, data, title) {
         const container = document.getElementById(containerId);
         if (!container) {
@@ -202,7 +200,7 @@ const ChartUtils = (function() {
         const options = {
             series: data.map(item => item.value),
             chart: {
-                type: 'donut',  // Изменили тип на donut
+                type: 'donut',  // Тип donut вместо pie
                 height: 300,
                 toolbar: {
                     show: false
@@ -226,7 +224,7 @@ const ChartUtils = (function() {
             plotOptions: {
                 pie: {
                     donut: {
-                        size: '60%',  // Увеличиваем размер отверстия
+                        size: '60%',  // Размер отверстия
                         labels: {
                             show: true,
                             name: {
@@ -301,17 +299,41 @@ const ChartUtils = (function() {
             value: count
         }));
         
+        // Формируем данные по доходу для каждого сегмента
+        const segmentRevenueData = [];
+        
+        if (state.rfmData.customers && state.rfmData.customers.length > 0) {
+            // Группируем клиентов по сегментам и суммируем их доход
+            const segmentRevenues = {};
+            
+            state.rfmData.customers.forEach(customer => {
+                const segment = customer.Customer_Segment;
+                if (!segmentRevenues[segment]) {
+                    segmentRevenues[segment] = 0;
+                }
+                segmentRevenues[segment] += customer.Monetary;
+            });
+            
+            // Преобразуем в формат для графика
+            for (const [segment, revenue] of Object.entries(segmentRevenues)) {
+                segmentRevenueData.push({
+                    name: segment,
+                    revenue: revenue
+                });
+            }
+            
+            // Сортируем по доходу в убывающем порядке
+            segmentRevenueData.sort((a, b) => b.revenue - a.revenue);
+        }
+        
         // Графики для вкладки "Обзор"
         if (activeTab === 'overview') {
             if (document.getElementById('segments-chart')) {
                 createBarChart('segments-chart', segmentData);
             }
             
-            if (document.getElementById('rfm-scores-chart') && state.rfmData.rfm_scores) {
-                const rfmScoreData = Object.entries(state.rfmData.rfm_scores)
-                    .map(([score, count]) => ({ name: score, value: count }));
-                
-                createLineChart('rfm-scores-chart', rfmScoreData);
+            if (document.getElementById('segment-revenue-chart') && segmentRevenueData.length > 0) {
+                createSegmentRevenueChart('segment-revenue-chart', segmentRevenueData);
             }
         }
         
@@ -326,8 +348,8 @@ const ChartUtils = (function() {
     // Публичный API
     return {
         createBarChart,
-        createLineChart,
         createPieChart,
+        createSegmentRevenueChart,
         initializeCharts
     };
 })();

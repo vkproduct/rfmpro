@@ -181,7 +181,9 @@ const DataService = (function() {
             'Потенциально лояльные': 'potential',
             'Новые клиенты': 'new',
             'Под угрозой ухода': 'risk',
-            'Потерянные': 'lost'
+            'Нельзя потерять': 'lost',
+            'Потерянные': 'lost',
+            'Крупные покупатели': 'default'
         };
         
         return segmentMap[segmentName] || 'default';

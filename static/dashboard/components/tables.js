@@ -119,11 +119,75 @@ const TablesComponent = (function() {
         // Логика поиска
     }
     
+    /**
+     * Сортирует данные по указанному столбцу
+     * @param {string} column Название столбца
+     * @param {boolean} ascending Направление сортировки
+     */
+    function sortBy(column, ascending) {
+        console.log(`Сортировка по ${column}, ascending: ${ascending}`);
+        // Логика сортировки
+    }
+    
+    /**
+     * Отрисовывает полностью вкладку клиентов
+     * @returns {string} HTML-код вкладки клиентов
+     */
+    function renderClientsTab() {
+        return `
+            <div class="mb-4">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex flex-wrap gap-4 justify-between items-center">
+                        <div class="search-box flex items-center border rounded p-2 w-full md:w-auto md:flex-grow max-w-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 mr-2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input 
+                                type="text" 
+                                id="client-search" 
+                                placeholder="Поиск клиентов..." 
+                                class="outline-none w-full"
+                                onkeyup="if(event.key === 'Enter') TablesComponent.searchClients(this.value)"
+                            >
+                        </div>
+                        <div class="flex gap-2">
+                            <select class="p-2 border rounded" id="segment-filter">
+                                <option value="all">Все сегменты</option>
+                                <option value="Чемпионы">Чемпионы</option>
+                                <option value="Лояльные клиенты">Лояльные клиенты</option>
+                                <option value="Новые клиенты">Новые клиенты</option>
+                                <option value="Под угрозой ухода">Под угрозой ухода</option>
+                                <option value="Потерянные">Потерянные</option>
+                            </select>
+                            <select class="p-2 border rounded" id="score-filter">
+                                <option value="all">Все оценки RFM</option>
+                                <option value="high">Высокая оценка (8-10)</option>
+                                <option value="medium">Средняя оценка (5-7)</option>
+                                <option value="low">Низкая оценка (1-4)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="clients-table-container">
+                ${renderClientsTable()}
+            </div>
+            
+            <div class="mt-4">
+                ${createPagination(1, 5)}
+            </div>
+        `;
+    }
+    
     // Публичный API
     return {
         renderClientsTable,
+        renderClientsTab,
         createPagination,
         goToPage,
-        searchClients
+        searchClients,
+        sortBy
     };
 })();

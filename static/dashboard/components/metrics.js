@@ -49,8 +49,8 @@ const MetricsComponent = (function() {
                     <div class="chart-container" id="segments-chart"></div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-4">
-                    <h3 class="text-lg font-semibold mb-4">Распределение по RFM-оценке</h3>
-                    <div class="chart-container" id="rfm-scores-chart"></div>
+                    <h3 class="text-lg font-semibold mb-4">Доход по каждому сегменту</h3>
+                    <div class="chart-container" id="segment-revenue-chart"></div>
                 </div>
             </div>
         `;
